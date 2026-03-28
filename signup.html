@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostChat - Sign Up</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="logo">👻 GhostChat</div>
+        <p class="tagline">Create Your Ghost Account</p>
+        <div class="form-card">
+            <input type="email" id="email" placeholder="Enter your email">
+            <div class="password-wrap">
+                <input type="password" id="password" placeholder="Create password">
+                <i class="fa-solid fa-eye" onclick="togglePassword('password', this)"></i>
+            </div>
+            <button onclick="signUp()" class="btn-primary">Create Account</button>
+            <p class="switch">Already have an account? <a href="login.html">Login</a></p>
+        </div>
+        <div id="message"></div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

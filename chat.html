@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostChat</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <span>👻 GhostChat</span>
+            <span id="myCode" class="my-code"></span>
+        </div>
+
+        <div class="search-area">
+            <input type="text" id="searchCode" placeholder="Enter Ghost Code...">
+            <button onclick="startChat()">Connect</button>
+        </div>
+
+        <div id="connectionStatus" class="connection-status"></div>
+
+        <div id="chatBox" class="chat-box"></div>
+
+        <div class="input-area">
+            <textarea id="msgInput" placeholder="Type your message..." rows="1"></textarea>
+            <button onclick="sendMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
