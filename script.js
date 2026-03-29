@@ -195,21 +195,24 @@ async function loadMessages() {
 function subscribeToMessages() {
     const myCode = localStorage.getItem('ghostCode')
 
-    db.channel('messages')
-        .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'messages'
-        }, payload => {
-            const msg = payload.new
-            if (msg.sender_code === currentPartner || msg.receiver_code === currentPartner) {
+    db.channel('realtime-messages')
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages',
+                filter: `receiver_code=eq.${myCode}`
+            },
+            (payload) => {
+                console.log('New message received:', payload)
                 loadMessages()
-                if (msg.receiver_code === myCode) {
-                    showNotification(msg.sender_code, msg.message)
-                }
+                showNotification(payload.new.sender_code, payload.new.message)
             }
+        )
+        .subscribe((status) => {
+            console.log('Subscription status:', status)
         })
-        .subscribe()
 }
 
 // Run on chat page
