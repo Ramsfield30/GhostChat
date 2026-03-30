@@ -115,10 +115,10 @@ async function requestNotifications() {
 }
 
 // Show notification
-function showNotification(sender, message) {
+function showNotification(sender, msg) {
     if (Notification.permission === 'granted') {
         new Notification('👻 GhostChat', {
-            body: `${sender}: ${message}`,
+            body: `${sender}: ${msg}`,
             icon: '👻'
         })
     }
@@ -154,32 +154,57 @@ async function sendMessage() {
 
     const myCode = localStorage.getItem('ghostCode')
 
-    await db.from('messages').insert({
+    const { error } = await db.from('messages').insert({
         sender_code: myCode,
         receiver_code: currentPartner,
         message: text,
         is_deleted: false
     })
 
+    if (error) {
+        console.log('Send error:', error)
+        return
+    }
+
     input.value = ''
     loadMessages()
 }
 
+// Track last message count for notifications
+let lastMessageCount = 0
+
 // Load messages
 async function loadMessages() {
     const myCode = localStorage.getItem('ghostCode')
+    if (!currentPartner || !myCode) return
 
-    const { data } = await db
+    const { data, error } = await db
         .from('messages')
         .select('*')
         .or(`and(sender_code.eq.${myCode},receiver_code.eq.${currentPartner}),and(sender_code.eq.${currentPartner},receiver_code.eq.${myCode})`)
         .eq('is_deleted', false)
         .order('created_at', { ascending: true })
 
-    const chatBox = document.getElementById('chatBox')
-    chatBox.innerHTML = ''
+    if (error) {
+        console.log('Load error:', error)
+        return
+    }
 
     if (!data) return
+
+    // Notify on new messages
+    if (data.length > lastMessageCount) {
+        const newMsgs = data.slice(lastMessageCount)
+        newMsgs.forEach(msg => {
+            if (msg.receiver_code === myCode) {
+                showNotification(msg.sender_code, msg.message)
+            }
+        })
+    }
+    lastMessageCount = data.length
+
+    const chatBox = document.getElementById('chatBox')
+    chatBox.innerHTML = ''
 
     data.forEach(msg => {
         const div = document.createElement('div')
@@ -191,28 +216,14 @@ async function loadMessages() {
     chatBox.scrollTop = chatBox.scrollHeight
 }
 
-// Real time updates
+// Poll for new messages every 2 seconds
 function subscribeToMessages() {
-    const myCode = localStorage.getItem('ghostCode')
-
-    db.channel('realtime-messages')
-        .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages',
-                filter: `receiver_code=eq.${myCode}`
-            },
-            (payload) => {
-                console.log('New message received:', payload)
-                loadMessages()
-                showNotification(payload.new.sender_code, payload.new.message)
-            }
-        )
-        .subscribe((status) => {
-            console.log('Subscription status:', status)
-        })
+    console.log('Polling started!')
+    setInterval(async () => {
+        if (currentPartner) {
+            await loadMessages()
+        }
+    }, 2000)
 }
 
 // Run on chat page
