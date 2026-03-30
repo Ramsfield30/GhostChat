@@ -289,3 +289,113 @@ input:focus {
     display: block;
     margin-bottom: 3px;
 }
+.header-icons {
+    display: flex;
+    gap: 20px;
+    color: #aaa;
+    font-size: 18px;
+}
+
+.header-icons i {
+    cursor: pointer;
+}
+
+.header-icons i:hover {
+    color: #7c3aed;
+}
+
+.search-bar {
+    padding: 10px 15px;
+    background: #111;
+    border-bottom: 1px solid #222;
+}
+
+.search-bar input {
+    margin-bottom: 0;
+    border-radius: 25px;
+    background: #1a1a1a;
+}
+
+.my-code-bar {
+    padding: 8px 15px;
+    background: #0f0f0f;
+    border-bottom: 1px solid #222;
+    font-size: 12px;
+    color: #7c3aed;
+}
+
+.chats-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.chat-item {
+    display: flex;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #111;
+    cursor: pointer;
+    transition: background 0.2s;
+    gap: 15px;
+}
+
+.chat-item:hover {
+    background: #111;
+}
+
+.chat-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.chat-info {
+    flex: 1;
+    overflow: hidden;
+}
+
+.chat-name {
+    color: white;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.chat-preview {
+    color: #666;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-time {
+    color: #555;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.loading {
+    text-align: center;
+    padding: 30px;
+    color: #666;
+}
+
+.no-chats {
+    text-align: center;
+    padding: 50px 20px;
+    color: #555;
+}
+
+.no-chats i {
+    font-size: 50px;
+    margin-bottom: 15px;
+    display: block;
+    color: #333;
+}

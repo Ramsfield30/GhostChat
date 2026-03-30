@@ -181,7 +181,8 @@ async function loadMessages() {
     const { data, error } = await db
         .from('messages')
         .select('*')
-        .or(`and(sender_code.eq.${myCode},receiver_code.eq.${currentPartner}),and(sender_code.eq.${currentPartner},receiver_code.eq.${myCode})`)
+        .or(`sender_code.eq.${myCode},sender_code.eq.${currentPartner}`)
+        .or(`receiver_code.eq.${myCode},receiver_code.eq.${currentPartner}`)
         .eq('is_deleted', false)
         .order('created_at', { ascending: true })
 
@@ -190,18 +191,10 @@ async function loadMessages() {
         return
     }
 
-    if (!data) return
-
-    // Notify on new messages
-    if (data.length > lastMessageCount) {
-        const newMsgs = data.slice(lastMessageCount)
-        newMsgs.forEach(msg => {
-            if (msg.receiver_code === myCode) {
-                showNotification(msg.sender_code, msg.message)
-            }
-        })
+    if (!data || data.length === 0) {
+        document.getElementById('chatBox').innerHTML = '<p style="text-align:center;color:#555;padding:20px">No messages yet!</p>'
+        return
     }
-    lastMessageCount = data.length
 
     const chatBox = document.getElementById('chatBox')
     chatBox.innerHTML = ''
@@ -215,6 +208,7 @@ async function loadMessages() {
 
     chatBox.scrollTop = chatBox.scrollHeight
 }
+
 
 // Poll for new messages every 2 seconds
 function subscribeToMessages() {
@@ -231,4 +225,107 @@ if (document.getElementById('chatBox')) {
     showMyCode()
     subscribeToMessages()
     requestNotifications()
+}
+// Load chats list
+async function loadChats() {
+    const myCode = localStorage.getItem('ghostCode')
+    if (!myCode) {
+        window.location.href = 'login.html'
+        return
+    }
+
+    // Show my code
+    const codeBar = document.getElementById('myCodeBar')
+    if (codeBar) codeBar.textContent = '👻 Your Code: ' + myCode
+
+    const { data, error } = await db
+        .from('messages')
+        .select('*')
+        .or(`sender_code.eq.${myCode},receiver_code.eq.${myCode}`)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.log('Error:', error)
+        return
+    }
+
+    const chatsList = document.getElementById('chatsList')
+
+    if (!data || data.length === 0) {
+        chatsList.innerHTML = `
+            <div class="no-chats">
+                <i class="fa-solid fa-ghost"></i>
+                No chats yet! Start a new chat 👆
+            </div>
+        `
+        return
+    }
+
+    // Get unique chat partners
+    const partners = {}
+    data.forEach(msg => {
+        const partner = msg.sender_code === myCode ? msg.receiver_code : msg.sender_code
+        if (!partners[partner]) {
+            partners[partner] = {
+                code: partner,
+                lastMessage: msg.message,
+                time: new Date(msg.created_at)
+            }
+        }
+    })
+
+    chatsList.innerHTML = ''
+    Object.values(partners).forEach(partner => {
+        const item = document.createElement('div')
+        item.classList.add('chat-item')
+        item.dataset.code = partner.code
+        item.innerHTML = `
+            <div class="chat-avatar">👻</div>
+            <div class="chat-info">
+                <div class="chat-name">${partner.code}</div>
+                <div class="chat-preview">${partner.lastMessage}</div>
+            </div>
+            <div class="chat-time">${formatTime(partner.time)}</div>
+        `
+        item.onclick = () => openChat(partner.code)
+        chatsList.appendChild(item)
+    })
+}
+
+// Format time
+function formatTime(date) {
+    const now = new Date()
+    const diff = now - date
+    if (diff < 60000) return 'Just now'
+    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago'
+    if (diff < 86400000) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleDateString()
+}
+
+// Open chat with partner
+function openChat(code) {
+    localStorage.setItem('lastPartner', code)
+    window.location.href = 'chat.html'
+}
+
+// Toggle search bar
+function toggleSearch() {
+    const bar = document.getElementById('searchBar')
+    bar.style.display = bar.style.display === 'none' ? 'block' : 'none'
+}
+
+// Filter chats
+function filterChats() {
+    const query = document.getElementById('searchInput').value.toLowerCase()
+    const items = document.querySelectorAll('.chat-item')
+    items.forEach(item => {
+        item.style.display = item.dataset.code.toLowerCase().includes(query) ? 'flex' : 'none'
+    })
+}
+
+// Run on chats page
+if (document.getElementById('chatsList')) {
+    loadChats()
+    setInterval(loadChats, 5000)
 }

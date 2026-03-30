@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostChat - Chats</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <span>👻 GhostChat</span>
+            <div class="header-icons">
+                <i class="fa-solid fa-magnifying-glass" onclick="toggleSearch()"></i>
+                <i class="fa-solid fa-pen-to-square" onclick="window.location.href='chat.html'"></i>
+            </div>
+        </div>
+
+        <div id="searchBar" class="search-bar" style="display:none">
+            <input type="text" id="searchInput" placeholder="Search chats..." oninput="filterChats()">
+        </div>
+
+        <div id="myCodeBar" class="my-code-bar"></div>
+
+        <div id="chatsList" class="chats-list">
+            <div class="loading">Loading chats...</div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
