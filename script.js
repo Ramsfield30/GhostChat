@@ -411,7 +411,7 @@ function formatTime(date) {
 // Open chat with partner
 function openChat(code) {
     localStorage.setItem('lastPartner', code)
-    window.location.href = 'chats.html'
+    window.location.href = 'chat.html'
 }
 
 // Toggle search bar
