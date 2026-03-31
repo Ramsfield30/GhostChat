@@ -8,6 +8,17 @@ function generateGhostCode() {
     return code
 }
 
+// Email validation helper
+function validateEmail(email) {
+    const re = /^[^\s@]+@([^\s@]+\.)+[^\s@]+$/
+    return re.test(email)
+}
+
+// Password validation helper
+function validatePassword(password) {
+    return password.length >= 8
+}
+
 // Toggle password visibility
 function togglePassword(inputId, icon) {
     const input = document.getElementById(inputId)
@@ -32,6 +43,30 @@ async function signUp() {
         return
     }
 
+    if (!validateEmail(email)) {
+        message.style.color = 'red'
+        message.textContent = '❌ Please enter a valid email address (example@email.com)!'
+        return
+    }
+
+    if (!validatePassword(password)) {
+        message.style.color = 'red'
+        message.textContent = '❌ Password must be at least 8 characters long!'
+        return
+    }
+
+    const { data: existingUser, error: checkError } = await db
+        .from('users')
+        .select('email')
+        .eq('email', email)
+        .maybeSingle()
+
+    if (existingUser) {
+        message.style.color = 'red'
+        message.textContent = '❌ This email is already registered! Please login instead.'
+        return
+    }
+
     const ghostCode = generateGhostCode()
 
     const { error } = await db
@@ -39,7 +74,8 @@ async function signUp() {
         .insert({
             email: email,
             password: password,
-            code: ghostCode
+            code: ghostCode,
+            created_at: new Date()
         })
 
     if (!error) {
@@ -76,6 +112,10 @@ async function login() {
         .single()
 
     if (data) {
+        await db.from('users')
+            .update({ last_login: new Date() })
+            .eq('id', data.id)
+        
         localStorage.setItem('ghostCode', data.code)
         localStorage.setItem('email', email)
         message.style.color = '#7c3aed'
@@ -89,8 +129,72 @@ async function login() {
     }
 }
 
+// Forgot password function
+async function resetPassword() {
+    const email = document.getElementById('resetEmail').value
+    const message = document.getElementById('message')
+    
+    if (!email) {
+        message.style.color = 'red'
+        message.textContent = 'Please enter your email!'
+        return
+    }
+    
+    const { data: user, error } = await db
+        .from('users')
+        .select('email')
+        .eq('email', email)
+        .maybeSingle()
+    
+    if (!user) {
+        message.style.color = 'red'
+        message.textContent = '❌ Email not found!'
+        return
+    }
+    
+    const tempPassword = Math.random().toString(36).slice(-8)
+    
+    const { error: updateError } = await db
+        .from('users')
+        .update({ password: tempPassword })
+        .eq('email', email)
+    
+    if (!updateError) {
+        message.style.color = '#7c3aed'
+        message.textContent = `✅ Temporary password: ${tempPassword} (copy this now!)`
+        console.log('Temporary password for', email, ':', tempPassword)
+    } else {
+        message.style.color = 'red'
+        message.textContent = '❌ Error resetting password!'
+    }
+}
+
+// Google Sign-in function
+async function signInWithGoogle() {
+    try {
+        const message = document.getElementById('message')
+        if (message) {
+            message.style.color = '#7c3aed'
+            message.textContent = '⚠️ Google Sign-in setup required. Please use email/password for now.'
+            console.log('To set up Google Sign-in:')
+            console.log('1. Go to https://console.cloud.google.com')
+            console.log('2. Create a project and enable Google+ API')
+            console.log('3. Create OAuth credentials')
+            console.log('4. Add your domain to authorized redirect URIs')
+        }
+    } catch (error) {
+        console.error('Google sign-in error:', error)
+        const message = document.getElementById('message')
+        if (message) {
+            message.style.color = 'red'
+            message.textContent = '❌ Google sign-in not configured yet!'
+        }
+    }
+}
+
 // Current chat partner
 let currentPartner = null
+let pollingInterval = null
 
 // Show ghost code in header
 function showMyCode() {
@@ -101,8 +205,10 @@ function showMyCode() {
     const lastPartner = localStorage.getItem('lastPartner')
     if (lastPartner) {
         currentPartner = lastPartner
-        document.getElementById('searchCode').value = lastPartner
-        document.getElementById('connectionStatus').textContent = '🟢 Connected to ' + lastPartner
+        const searchInput = document.getElementById('searchCode')
+        if (searchInput) searchInput.value = lastPartner
+        const statusEl = document.getElementById('connectionStatus')
+        if (statusEl) statusEl.textContent = '🟢 Connected to ' + lastPartner
         loadMessages()
     }
 }
@@ -138,8 +244,10 @@ async function startChat() {
     if (data) {
         currentPartner = code
         localStorage.setItem('lastPartner', code)
-        document.getElementById('chatBox').innerHTML = ''
-        document.getElementById('connectionStatus').textContent = '🟢 Connected to ' + code
+        const chatBox = document.getElementById('chatBox')
+        if (chatBox) chatBox.innerHTML = ''
+        const statusEl = document.getElementById('connectionStatus')
+        if (statusEl) statusEl.textContent = '🟢 Connected to ' + code
         loadMessages()
     } else {
         alert('Ghost Code not found!')
@@ -170,9 +278,6 @@ async function sendMessage() {
     loadMessages()
 }
 
-// Track last message count for notifications
-let lastMessageCount = 0
-
 // Load messages
 async function loadMessages() {
     const myCode = localStorage.getItem('ghostCode')
@@ -191,12 +296,14 @@ async function loadMessages() {
         return
     }
 
+    const chatBox = document.getElementById('chatBox')
+    if (!chatBox) return
+
     if (!data || data.length === 0) {
-        document.getElementById('chatBox').innerHTML = '<p style="text-align:center;color:#555;padding:20px">No messages yet!</p>'
+        chatBox.innerHTML = '<p style="text-align:center;color:#555;padding:20px">No messages yet!</p>'
         return
     }
 
-    const chatBox = document.getElementById('chatBox')
     chatBox.innerHTML = ''
 
     data.forEach(msg => {
@@ -209,23 +316,22 @@ async function loadMessages() {
     chatBox.scrollTop = chatBox.scrollHeight
 }
 
-
-// Poll for new messages every 2 seconds
+// Poll for new messages
 function subscribeToMessages() {
-    console.log('Polling started!')
-    setInterval(async () => {
+    if (pollingInterval) clearInterval(pollingInterval)
+    
+    pollingInterval = setInterval(async () => {
         if (currentPartner) {
             await loadMessages()
         }
     }, 2000)
 }
 
-// Run on chat page
-if (document.getElementById('chatBox')) {
-    showMyCode()
-    subscribeToMessages()
-    requestNotifications()
-}
+// Clean up polling on page unload
+window.addEventListener('beforeunload', () => {
+    if (pollingInterval) clearInterval(pollingInterval)
+})
+
 // Load chats list
 async function loadChats() {
     const myCode = localStorage.getItem('ghostCode')
@@ -234,7 +340,6 @@ async function loadChats() {
         return
     }
 
-    // Show my code
     const codeBar = document.getElementById('myCodeBar')
     if (codeBar) codeBar.textContent = '👻 Your Code: ' + myCode
 
@@ -251,6 +356,7 @@ async function loadChats() {
     }
 
     const chatsList = document.getElementById('chatsList')
+    if (!chatsList) return
 
     if (!data || data.length === 0) {
         chatsList.innerHTML = `
@@ -262,7 +368,6 @@ async function loadChats() {
         return
     }
 
-    // Get unique chat partners
     const partners = {}
     data.forEach(msg => {
         const partner = msg.sender_code === myCode ? msg.receiver_code : msg.sender_code
@@ -312,7 +417,7 @@ function openChat(code) {
 // Toggle search bar
 function toggleSearch() {
     const bar = document.getElementById('searchBar')
-    bar.style.display = bar.style.display === 'none' ? 'block' : 'none'
+    if (bar) bar.style.display = bar.style.display === 'none' ? 'block' : 'none'
 }
 
 // Filter chats
@@ -324,8 +429,18 @@ function filterChats() {
     })
 }
 
+// Run on chat page
+if (document.getElementById('chatBox')) {
+    showMyCode()
+    subscribeToMessages()
+    requestNotifications()
+}
+
 // Run on chats page
 if (document.getElementById('chatsList')) {
     loadChats()
-    setInterval(loadChats, 5000)
+    const chatsInterval = setInterval(loadChats, 5000)
+    window.addEventListener('beforeunload', () => {
+        clearInterval(chatsInterval)
+    })
 }
