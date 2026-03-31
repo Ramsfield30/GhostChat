@@ -84,7 +84,7 @@ async function signUp() {
         localStorage.setItem('ghostCode', ghostCode)
         localStorage.setItem('email', email)
         setTimeout(() => {
-            window.location.href = 'chat.html'
+            window.location.href = 'chats.html'
         }, 3000)
     } else {
         message.style.color = 'red'
@@ -121,7 +121,7 @@ async function login() {
         message.style.color = '#7c3aed'
         message.textContent = '✅ Login successful!'
         setTimeout(() => {
-            window.location.href = 'chat.html'
+            window.location.href = 'chats.html'
         }, 1500)
     } else {
         message.style.color = 'red'
@@ -411,7 +411,7 @@ function formatTime(date) {
 // Open chat with partner
 function openChat(code) {
     localStorage.setItem('lastPartner', code)
-    window.location.href = 'chat.html'
+    window.location.href = 'chats.html'
 }
 
 // Toggle search bar
