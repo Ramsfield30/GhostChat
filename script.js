@@ -177,7 +177,7 @@ async function updateLastSeen() {
 
 // Format last seen text
 function formatLastSeen(lastSeen) {
-    if (!lastSeen) return 'Never online'
+    if (!lastSeen) return 'Not online'
     const diff = new Date() - new Date(lastSeen)
     if (diff < 30000) return '🟢 Online'
     if (diff < 60000) return 'Last seen just now'
