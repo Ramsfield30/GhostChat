@@ -55,7 +55,7 @@ async function signUp() {
         return
     }
 
-    const { data: existingUser, error: checkError } = await db
+    const { data: existingUser } = await db
         .from('users')
         .select('email')
         .eq('email', email)
@@ -113,9 +113,9 @@ async function login() {
 
     if (data) {
         await db.from('users')
-            .update({ last_login: new Date() })
+            .update({ last_login: new Date(), last_seen: new Date() })
             .eq('id', data.id)
-        
+
         localStorage.setItem('ghostCode', data.code)
         localStorage.setItem('email', email)
         message.style.color = '#7c3aed'
@@ -133,63 +133,57 @@ async function login() {
 async function resetPassword() {
     const email = document.getElementById('resetEmail').value
     const message = document.getElementById('message')
-    
+
     if (!email) {
         message.style.color = 'red'
         message.textContent = 'Please enter your email!'
         return
     }
-    
-    const { data: user, error } = await db
+
+    const { data: user } = await db
         .from('users')
         .select('email')
         .eq('email', email)
         .maybeSingle()
-    
+
     if (!user) {
         message.style.color = 'red'
         message.textContent = '❌ Email not found!'
         return
     }
-    
+
     const tempPassword = Math.random().toString(36).slice(-8)
-    
+
     const { error: updateError } = await db
         .from('users')
         .update({ password: tempPassword })
         .eq('email', email)
-    
+
     if (!updateError) {
         message.style.color = '#7c3aed'
         message.textContent = `✅ Temporary password: ${tempPassword} (copy this now!)`
-        console.log('Temporary password for', email, ':', tempPassword)
     } else {
         message.style.color = 'red'
         message.textContent = '❌ Error resetting password!'
     }
 }
 
-// Google Sign-in function
-async function signInWithGoogle() {
-    try {
-        const message = document.getElementById('message')
-        if (message) {
-            message.style.color = '#7c3aed'
-            message.textContent = '⚠️ Google Sign-in setup required. Please use email/password for now.'
-            console.log('To set up Google Sign-in:')
-            console.log('1. Go to https://console.cloud.google.com')
-            console.log('2. Create a project and enable Google+ API')
-            console.log('3. Create OAuth credentials')
-            console.log('4. Add your domain to authorized redirect URIs')
-        }
-    } catch (error) {
-        console.error('Google sign-in error:', error)
-        const message = document.getElementById('message')
-        if (message) {
-            message.style.color = 'red'
-            message.textContent = '❌ Google sign-in not configured yet!'
-        }
-    }
+// Update last seen
+async function updateLastSeen() {
+    const myCode = localStorage.getItem('ghostCode')
+    if (!myCode) return
+    await db.from('users').update({ last_seen: new Date() }).eq('code', myCode)
+}
+
+// Format last seen text
+function formatLastSeen(lastSeen) {
+    if (!lastSeen) return 'Never online'
+    const diff = new Date() - new Date(lastSeen)
+    if (diff < 30000) return '🟢 Online'
+    if (diff < 60000) return 'Last seen just now'
+    if (diff < 3600000) return 'Last seen ' + Math.floor(diff / 60000) + ' min ago'
+    if (diff < 86400000) return 'Last seen ' + Math.floor(diff / 3600000) + ' hr ago'
+    return 'Last seen ' + new Date(lastSeen).toLocaleDateString()
 }
 
 // Current chat partner
@@ -197,7 +191,7 @@ let currentPartner = null
 let pollingInterval = null
 
 // Show ghost code in header
-function showMyCode() {
+async function showMyCode() {
     const code = localStorage.getItem('ghostCode')
     const el = document.getElementById('myCode')
     if (el && code) el.textContent = 'Your Code: ' + code
@@ -207,8 +201,19 @@ function showMyCode() {
         currentPartner = lastPartner
         const searchInput = document.getElementById('searchCode')
         if (searchInput) searchInput.value = lastPartner
+
+        // Show partner last seen
+        const { data: partnerInfo } = await db
+            .from('users')
+            .select('last_seen')
+            .eq('code', lastPartner)
+            .single()
+
         const statusEl = document.getElementById('connectionStatus')
-        if (statusEl) statusEl.textContent = '🟢 Connected to ' + lastPartner
+        if (statusEl) {
+            statusEl.textContent = lastPartner + ' — ' + (partnerInfo ? formatLastSeen(partnerInfo.last_seen) : 'Unknown')
+        }
+
         loadMessages()
     }
 }
@@ -246,8 +251,13 @@ async function startChat() {
         localStorage.setItem('lastPartner', code)
         const chatBox = document.getElementById('chatBox')
         if (chatBox) chatBox.innerHTML = ''
+
+        // Show last seen
         const statusEl = document.getElementById('connectionStatus')
-        if (statusEl) statusEl.textContent = '🟢 Connected to ' + code
+        if (statusEl) {
+            statusEl.textContent = code + ' — ' + formatLastSeen(data.last_seen)
+        }
+
         loadMessages()
     } else {
         alert('Ghost Code not found!')
@@ -266,7 +276,8 @@ async function sendMessage() {
         sender_code: myCode,
         receiver_code: currentPartner,
         message: text,
-        is_deleted: false
+        is_deleted: false,
+        is_read: false
     })
 
     if (error) {
@@ -314,12 +325,18 @@ async function loadMessages() {
     })
 
     chatBox.scrollTop = chatBox.scrollHeight
+
+    // Mark received messages as read
+    await db.from('messages')
+        .update({ is_read: true })
+        .eq('receiver_code', myCode)
+        .eq('sender_code', currentPartner)
+        .eq('is_read', false)
 }
 
 // Poll for new messages
 function subscribeToMessages() {
     if (pollingInterval) clearInterval(pollingInterval)
-    
     pollingInterval = setInterval(async () => {
         if (currentPartner) {
             await loadMessages()
@@ -327,7 +344,25 @@ function subscribeToMessages() {
     }, 2000)
 }
 
-// Clean up polling on page unload
+// Update partner last seen periodically
+function updatePartnerStatus() {
+    setInterval(async () => {
+        if (currentPartner) {
+            const { data } = await db
+                .from('users')
+                .select('last_seen')
+                .eq('code', currentPartner)
+                .single()
+
+            const statusEl = document.getElementById('connectionStatus')
+            if (statusEl && data) {
+                statusEl.textContent = currentPartner + ' — ' + formatLastSeen(data.last_seen)
+            }
+        }
+    }, 15000)
+}
+
+// Clean up on page unload
 window.addEventListener('beforeunload', () => {
     if (pollingInterval) clearInterval(pollingInterval)
 })
@@ -368,6 +403,7 @@ async function loadChats() {
         return
     }
 
+    // Get unique chat partners with unread count
     const partners = {}
     data.forEach(msg => {
         const partner = msg.sender_code === myCode ? msg.receiver_code : msg.sender_code
@@ -375,8 +411,13 @@ async function loadChats() {
             partners[partner] = {
                 code: partner,
                 lastMessage: msg.message,
-                time: new Date(msg.created_at)
+                time: new Date(msg.created_at),
+                unread: 0
             }
+        }
+        // Count unread messages
+        if (msg.receiver_code === myCode && !msg.is_read) {
+            partners[partner].unread++
         }
     })
 
@@ -391,7 +432,10 @@ async function loadChats() {
                 <div class="chat-name">${partner.code}</div>
                 <div class="chat-preview">${partner.lastMessage}</div>
             </div>
-            <div class="chat-time">${formatTime(partner.time)}</div>
+            <div class="chat-meta">
+                <div class="chat-time">${formatTime(partner.time)}</div>
+                ${partner.unread > 0 ? `<div class="unread-badge">${partner.unread}</div>` : ''}
+            </div>
         `
         item.onclick = () => openChat(partner.code)
         chatsList.appendChild(item)
@@ -434,11 +478,16 @@ if (document.getElementById('chatBox')) {
     showMyCode()
     subscribeToMessages()
     requestNotifications()
+    updateLastSeen()
+    updatePartnerStatus()
+    setInterval(updateLastSeen, 30000)
 }
 
 // Run on chats page
 if (document.getElementById('chatsList')) {
     loadChats()
+    updateLastSeen()
+    setInterval(updateLastSeen, 30000)
     const chatsInterval = setInterval(loadChats, 5000)
     window.addEventListener('beforeunload', () => {
         clearInterval(chatsInterval)
