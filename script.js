@@ -175,61 +175,17 @@ async function updateLastSeen() {
     await db.from('users').update({ last_seen: new Date() }).eq('code', myCode)
 }
 
-// More detailed last seen with exact time for recent activity
-function formatLastSeenDetailed(lastSeen) {
-    if (!lastSeen) return 'Last seen: Recently'
-    
-    const lastSeenDate = new Date(lastSeen)
-    const now = new Date()
-    const diff = now - lastSeenDate
-    const timeString = lastSeenDate.toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        second: diff < 60000 ? '2-digit' : undefined
-    })
-    
-    // Online now
-    if (diff < 30000) return '🟢 Online now'
-    
-    // Within last minute
-    if (diff < 60000) {
-        const seconds = Math.floor(diff / 1000)
-        return `Last seen ${seconds} second${seconds !== 1 ? 's' : ''} ago`
-    }
-    
-    // Within last hour
-    if (diff < 3600000) {
-        const minutes = Math.floor(diff / 60000)
-        return `Last seen ${minutes} minute${minutes !== 1 ? 's' : ''} ago (${timeString})`
-    }
-    
-    // Today
-    if (lastSeenDate.toDateString() === now.toDateString()) {
-        return `Last seen today at ${timeString}`
-    }
-    
-    // Yesterday
-    const yesterday = new Date(now)
-    yesterday.setDate(yesterday.getDate() - 1)
-    if (lastSeenDate.toDateString() === yesterday.toDateString()) {
-        return `Last seen yesterday at ${timeString}`
-    }
-    
-    // This week
-    const daysDiff = Math.floor(diff / 86400000)
-    if (daysDiff < 7) {
-        const dayName = lastSeenDate.toLocaleDateString([], { weekday: 'long' })
-        return `Last seen ${dayName} at ${timeString}`
-    }
-    
-    // Older
-    const dateString = lastSeenDate.toLocaleDateString([], { 
-        month: 'short', 
-        day: 'numeric',
-        year: lastSeenDate.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-    })
-    return `Last seen ${dateString} at ${timeString}`
+// Format last seen text
+function formatLastSeen(lastSeen) {
+    if (!lastSeen) return 'Never online'
+    const diff = new Date() - new Date(lastSeen)
+    if (diff < 30000) return '🟢 Online'
+    if (diff < 60000) return 'Last seen just now'
+    if (diff < 3600000) return 'Last seen ' + Math.floor(diff / 60000) + ' min ago'
+    if (diff < 86400000) return 'Last seen ' + Math.floor(diff / 3600000) + ' hr ago'
+    return 'Last seen ' + new Date(lastSeen).toLocaleDateString()
 }
+
 // Current chat partner
 let currentPartner = null
 let pollingInterval = null
