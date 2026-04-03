@@ -340,6 +340,7 @@ function subscribeToMessages() {
     pollingInterval = setInterval(async () => {
         if (currentPartner) {
             await loadMessages()
+            await checkTyping()
         }
     }, 2000)
 }
@@ -492,4 +493,39 @@ if (document.getElementById('chatsList')) {
     window.addEventListener('beforeunload', () => {
         clearInterval(chatsInterval)
     })
+}
+// Update typing status
+async function setTyping(isTyping) {
+    const myCode = localStorage.getItem('ghostCode')
+    if (!myCode || !currentPartner) return
+
+    await db.from('typing').upsert({
+        sender_code: myCode,
+        receiver_code: currentPartner,
+        is_typing: isTyping,
+        updated_at: new Date()
+    }, { onConflict: 'sender_code,receiver_code' })
+}
+
+// Check if partner is typing
+async function checkTyping() {
+    const myCode = localStorage.getItem('ghostCode')
+    if (!myCode || !currentPartner) return
+
+    const { data } = await db
+        .from('typing')
+        .select('*')
+        .eq('sender_code', currentPartner)
+        .eq('receiver_code', myCode)
+        .single()
+
+    const indicator = document.getElementById('typingIndicator')
+    if (indicator) {
+        if (data && data.is_typing) {
+            const diff = new Date() - new Date(data.updated_at)
+            indicator.textContent = diff < 3000 ? currentPartner + ' is typing...' : ''
+        } else {
+            indicator.textContent = ''
+        }
+    }
 }

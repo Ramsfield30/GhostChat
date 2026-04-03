@@ -416,3 +416,11 @@ input:focus {
     min-width: 20px;
     text-align: center;
 }
+.typing-indicator {
+    padding: 4px 15px;
+    font-size: 12px;
+    color: #7c3aed;
+    font-style: italic;
+    background: #0a0a0a;
+    min-height: 20px;
+}
