@@ -11,26 +11,34 @@
 </head>
 <body>
     <div class="chat-container">
+
         <div class="chat-header">
-            <span>👻 GhostChat</span>
+            <i class="fa-solid fa-arrow-left" onclick="window.location.href='chats.html'"></i>
+            <div class="header-center">
+                <div id="connectionStatus" class="connection-status-header"></div>
+            </div>
             <span id="myCode" class="my-code"></span>
         </div>
 
         <div class="search-area">
-            <input type="text" id="searchCode" placeholder="Enter Ghost Code...">
+            <input type="text" id="searchCode" placeholder="Enter Ghost Code to connect...">
             <button onclick="startChat()">Connect</button>
         </div>
 
-        <div id="connectionStatus" class="connection-status"></div>
         <div id="typingIndicator" class="typing-indicator"></div>
 
         <div id="chatBox" class="chat-box"></div>
 
+        <div id="replyBar" class="reply-bar" style="display:none"></div>
+
         <div class="input-area">
-            <textarea id="msgInput" placeholder="Type your message..." rows="1" oninput="setTyping(true)" 
-    onblur="setTyping(false)"></textarea>
+            <textarea id="msgInput" placeholder="Type your message..." rows="1"
+                oninput="onTyping()"
+                onblur="setTyping(false)"
+                onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
             <button onclick="sendMessage()"><i class="fa-solid fa-paper-plane"></i></button>
         </div>
+
     </div>
     <script src="script.js"></script>
 </body>

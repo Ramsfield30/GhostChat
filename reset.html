@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostChat - Reset Password</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="logo">👻 GhostChat</div>
+        <p class="tagline">Reset Your Password</p>
+        <div class="form-card">
+            <p style="color:#666;font-size:13px;margin-bottom:15px">Enter your email and we'll give you a temporary password!</p>
+            <input type="email" id="resetEmail" placeholder="Enter your email">
+            <button onclick="resetPassword()" class="btn-primary">Get Temporary Password</button>
+            <p class="switch"><a href="login.html">← Back to Login</a></p>
+        </div>
+        <div id="message"></div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

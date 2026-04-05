@@ -1,12 +1,3 @@
-// ==================== HELPER FUNCTIONS ====================
-
-// Escape HTML to prevent XSS attacks
-function escapeHtml(text) {
-    const div = document.createElement('div')
-    div.textContent = text
-    return div.innerHTML
-}
-
 // Generate random ghost code
 function generateGhostCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -17,26 +8,15 @@ function generateGhostCode() {
     return code
 }
 
-// Email validation helper
+// Email validation
 function validateEmail(email) {
     const re = /^[^\s@]+@([^\s@]+\.)+[^\s@]+$/
     return re.test(email)
 }
 
-// Password validation helper (at least 8 chars)
+// Password validation
 function validatePassword(password) {
     return password.length >= 8
-}
-
-// Simple hash function for demo (REPLACE with bcrypt or Supabase Auth in production)
-// Note: This is NOT secure for production! Use Supabase Auth instead.
-async function hashPassword(password) {
-    // This is a simple hash for demo purposes only
-    // In production, use: await bcrypt.hash(password, 10) or Supabase Auth
-    const encoder = new TextEncoder()
-    const data = encoder.encode(password)
-    const hash = await crypto.subtle.digest('SHA-256', data)
-    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 // Toggle password visibility
@@ -51,531 +31,348 @@ function togglePassword(inputId, icon) {
     }
 }
 
-// Show loading spinner
-function showLoading(elementId, show) {
-    const element = document.getElementById(elementId)
-    if (!element) return
-    if (show) {
-        element.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Loading...'
-        element.style.color = '#7c3aed'
-    } else if (element.innerHTML.includes('Loading')) {
-        element.innerHTML = ''
-    }
-}
-
-// Show user-friendly message
-function showMessage(message, isError = true) {
-    const msgDiv = document.getElementById('message')
-    if (!msgDiv) return
-    msgDiv.style.color = isError ? '#ef4444' : '#7c3aed'
-    msgDiv.textContent = message
-    // Clear message after 5 seconds
-    setTimeout(() => {
-        if (msgDiv.textContent === message) {
-            msgDiv.textContent = ''
-        }
-    }, 5000)
-}
-
-// Copy to clipboard
-async function copyToClipboard(text) {
-    try {
-        await navigator.clipboard.writeText(text)
-        showMessage('✅ Code copied to clipboard!', false)
-    } catch (err) {
-        showMessage('❌ Failed to copy code')
-    }
-}
-
-// Logout function
-function logout() {
-    localStorage.removeItem('ghostCode')
-    localStorage.removeItem('email')
-    localStorage.removeItem('lastPartner')
-    if (pollingInterval) clearInterval(pollingInterval)
-    window.location.href = 'login.html'
-}
-
-// ==================== AUTHENTICATION ====================
-
-// Sign up function (with password hashing)
+// Sign up
 async function signUp() {
-    const email = document.getElementById('email').value.trim()
+    const email = document.getElementById('email').value
     const password = document.getElementById('password').value
     const message = document.getElementById('message')
 
     if (!email || !password) {
-        showMessage('Please fill all fields!')
+        message.style.color = 'red'
+        message.textContent = 'Please fill all fields!'
         return
     }
-
     if (!validateEmail(email)) {
-        showMessage('❌ Please enter a valid email address (example@email.com)!')
+        message.style.color = 'red'
+        message.textContent = '❌ Invalid email!'
         return
     }
-
     if (!validatePassword(password)) {
-        showMessage('❌ Password must be at least 8 characters long!')
+        message.style.color = 'red'
+        message.textContent = '❌ Password must be 8+ characters!'
         return
     }
 
-    showLoading('message', true)
+    const { data: existingUser } = await db.from('users').select('email').eq('email', email).maybeSingle()
+    if (existingUser) {
+        message.style.color = 'red'
+        message.textContent = '❌ Email already registered!'
+        return
+    }
 
-    try {
-        // Check if user exists
-        const { data: existingUser, error: checkError } = await db
-            .from('users')
-            .select('email')
-            .eq('email', email)
-            .maybeSingle()
+    const ghostCode = generateGhostCode()
+    const { error } = await db.from('users').insert({
+        email, password, code: ghostCode, created_at: new Date()
+    })
 
-        if (existingUser) {
-            showMessage('❌ This email is already registered! Please login instead.')
-            showLoading('message', false)
-            return
-        }
-
-        const ghostCode = generateGhostCode()
-        const hashedPassword = await hashPassword(password)
-
-        const { error: insertError } = await db
-            .from('users')
-            .insert({
-                email: email,
-                password_hash: hashedPassword,  // Store hash, not plain text!
-                code: ghostCode,
-                created_at: new Date(),
-                last_seen: new Date()
-            })
-
-        if (insertError) {
-            console.error('Signup error:', insertError)
-            showMessage('❌ Error creating account: ' + insertError.message)
-        } else {
-            showMessage(`✅ Account created! Your Ghost Code: ${ghostCode}`, false)
-            localStorage.setItem('ghostCode', ghostCode)
-            localStorage.setItem('email', email)
-            setTimeout(() => {
-                window.location.href = 'chats.html'
-            }, 3000)
-        }
-    } catch (error) {
-        console.error('Signup error:', error)
-        showMessage('❌ Network error. Please try again.')
-    } finally {
-        showLoading('message', false)
+    if (!error) {
+        message.style.color = '#7c3aed'
+        message.textContent = `✅ Account created! Your Ghost Code: ${ghostCode}`
+        localStorage.setItem('ghostCode', ghostCode)
+        localStorage.setItem('email', email)
+        setTimeout(() => { window.location.href = 'chats.html' }, 3000)
+    } else {
+        message.style.color = 'red'
+        message.textContent = '❌ Error: ' + error.message
     }
 }
 
-// Login function (with password hash comparison)
+// Login
 async function login() {
-    const email = document.getElementById('email').value.trim()
+    const email = document.getElementById('email').value
     const password = document.getElementById('password').value
     const message = document.getElementById('message')
 
     if (!email || !password) {
-        showMessage('Please fill all fields!')
+        message.style.color = 'red'
+        message.textContent = 'Please fill all fields!'
         return
     }
 
-    showLoading('message', true)
+    const { data } = await db.from('users').select('*').eq('email', email).eq('password', password).single()
 
-    try {
-        const hashedPassword = await hashPassword(password)
-
-        const { data, error } = await db
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .eq('password_hash', hashedPassword)
-            .maybeSingle()
-
-        if (error) {
-            console.error('Login error:', error)
-            showMessage('❌ Database error. Please try again.')
-        } else if (data) {
-            // Update last seen and online status
-            await db.from('users')
-                .update({ last_login: new Date(), last_seen: new Date(), is_online: true })
-                .eq('id', data.id)
-
-            localStorage.setItem('ghostCode', data.code)
-            localStorage.setItem('email', email)
-            showMessage('✅ Login successful!', false)
-            setTimeout(() => {
-                window.location.href = 'chats.html'
-            }, 1500)
-        } else {
-            showMessage('❌ Invalid email or password!')
-        }
-    } catch (error) {
-        console.error('Login error:', error)
-        showMessage('❌ Network error. Please try again.')
-    } finally {
-        showLoading('message', false)
+    if (data) {
+        await db.from('users').update({ last_login: new Date(), last_seen: new Date() }).eq('id', data.id)
+        localStorage.setItem('ghostCode', data.code)
+        localStorage.setItem('email', email)
+        message.style.color = '#7c3aed'
+        message.textContent = '✅ Login successful!'
+        setTimeout(() => { window.location.href = 'chats.html' }, 1500)
+    } else {
+        message.style.color = 'red'
+        message.textContent = '❌ Invalid email or password!'
     }
 }
 
-// Forgot password function
+// Reset password
 async function resetPassword() {
-    const email = document.getElementById('resetEmail').value.trim()
+    const email = document.getElementById('resetEmail').value
     const message = document.getElementById('message')
 
     if (!email) {
-        showMessage('Please enter your email!')
+        message.style.color = 'red'
+        message.textContent = 'Please enter your email!'
         return
     }
 
-    showLoading('message', true)
+    const { data: user } = await db.from('users').select('email').eq('email', email).maybeSingle()
+    if (!user) {
+        message.style.color = 'red'
+        message.textContent = '❌ Email not found!'
+        return
+    }
 
-    try {
-        const { data: user, error: findError } = await db
-            .from('users')
-            .select('email')
-            .eq('email', email)
-            .maybeSingle()
+    const tempPassword = Math.random().toString(36).slice(-8)
+    const { error } = await db.from('users').update({ password: tempPassword }).eq('email', email)
 
-        if (findError) {
-            showMessage('❌ Database error. Please try again.')
-        } else if (!user) {
-            showMessage('❌ Email not found!')
-        } else {
-            const tempPassword = Math.random().toString(36).slice(-8)
-            const hashedTemp = await hashPassword(tempPassword)
-
-            const { error: updateError } = await db
-                .from('users')
-                .update({ password_hash: hashedTemp })
-                .eq('email', email)
-
-            if (!updateError) {
-                showMessage(`✅ Temporary password: ${tempPassword} (copy this now!)`, false)
-            } else {
-                showMessage('❌ Error resetting password!')
-            }
-        }
-    } catch (error) {
-        console.error('Reset error:', error)
-        showMessage('❌ Network error. Please try again.')
-    } finally {
-        showLoading('message', false)
+    if (!error) {
+        message.style.color = '#7c3aed'
+        message.textContent = `✅ Temporary password: ${tempPassword} (copy this now!)`
+    } else {
+        message.style.color = 'red'
+        message.textContent = '❌ Error resetting password!'
     }
 }
-
-// ==================== CHAT FUNCTIONS ====================
 
 // Update last seen
 async function updateLastSeen() {
     const myCode = localStorage.getItem('ghostCode')
     if (!myCode) return
-    try {
-        await db.from('users').update({ 
-            last_seen: new Date(),
-            is_online: true
-        }).eq('code', myCode)
-    } catch (error) {
-        console.error('Update last seen error:', error)
-    }
+    await db.from('users').update({ last_seen: new Date() }).eq('code', myCode)
 }
 
-// Set user offline on page unload
-async function setOffline() {
-    const myCode = localStorage.getItem('ghostCode')
-    if (!myCode) return
-    try {
-        await db.from('users').update({ is_online: false }).eq('code', myCode)
-    } catch (error) {
-        console.error('Set offline error:', error)
-    }
-}
-
-// Format last seen text
-function formatLastSeen(lastSeen, isOnline) {
-    if (isOnline) return '🟢 Online'
-    if (!lastSeen) return '⚫ Offline'
+// Format last seen
+function formatLastSeen(lastSeen) {
+    if (!lastSeen) return 'Never online'
     const diff = new Date() - new Date(lastSeen)
+    if (diff < 30000) return '🟢 Online'
     if (diff < 60000) return 'Last seen just now'
     if (diff < 3600000) return 'Last seen ' + Math.floor(diff / 60000) + ' min ago'
     if (diff < 86400000) return 'Last seen ' + Math.floor(diff / 3600000) + ' hr ago'
     return 'Last seen ' + new Date(lastSeen).toLocaleDateString()
 }
 
-// Current chat partner
-let currentPartner = null
-let pollingInterval = null
+// Typing
 let typingTimeout = null
-
-// Show ghost code in header
-async function showMyCode() {
-    const code = localStorage.getItem('ghostCode')
-    const el = document.getElementById('myCode')
-    if (el && code) {
-        el.innerHTML = `Your Code: ${code} <i class="fa-regular fa-copy" onclick="copyToClipboard('${code}')" style="cursor:pointer; margin-left:5px;"></i>`
-    }
-
-    const lastPartner = localStorage.getItem('lastPartner')
-    if (lastPartner && document.getElementById('searchCode')) {
-        currentPartner = lastPartner
-        const searchInput = document.getElementById('searchCode')
-        if (searchInput) searchInput.value = lastPartner
-
-        // Show partner last seen
-        const { data: partnerInfo } = await db
-            .from('users')
-            .select('last_seen, is_online')
-            .eq('code', lastPartner)
-            .maybeSingle()
-
-        const statusEl = document.getElementById('connectionStatus')
-        if (statusEl && partnerInfo) {
-            statusEl.textContent = lastPartner + ' — ' + formatLastSeen(partnerInfo.last_seen, partnerInfo.is_online)
-        } else if (statusEl) {
-            statusEl.textContent = lastPartner + ' — Connecting...'
-        }
-
-        loadMessages()
-    }
-}
-
-// Request notification permission (on user action)
-async function requestNotifications() {
-    if ('Notification' in window && Notification.permission === 'default') {
-        await Notification.requestPermission()
-    }
-}
-
-// Show notification
-function showNotification(sender, msg) {
-    if (Notification.permission === 'granted' && document.hidden) {
-        new Notification('👻 GhostChat', {
-            body: `${sender}: ${msg.substring(0, 100)}`,
-            icon: '👻'
-        })
-    }
-}
-
-// Debounced typing status
-let typingDebounceTimer = null
 
 async function setTyping(isTyping) {
     const myCode = localStorage.getItem('ghostCode')
     if (!myCode || !currentPartner) return
-
-    // Clear existing debounce timer
-    if (typingDebounceTimer) clearTimeout(typingDebounceTimer)
-
-    if (isTyping) {
-        // Send typing start immediately
-        try {
-            await db.from('typing').upsert({
-                sender_code: myCode,
-                receiver_code: currentPartner,
-                is_typing: true,
-                updated_at: new Date()
-            }, { onConflict: 'sender_code,receiver_code' })
-        } catch (error) {
-            console.error('Typing error:', error)
-        }
-
-        // Set timeout to clear typing status after 2 seconds of no input
-        typingDebounceTimer = setTimeout(() => {
-            setTyping(false)
-        }, 2000)
-    } else {
-        try {
-            await db.from('typing').upsert({
-                sender_code: myCode,
-                receiver_code: currentPartner,
-                is_typing: false,
-                updated_at: new Date()
-            }, { onConflict: 'sender_code,receiver_code' })
-        } catch (error) {
-            console.error('Typing error:', error)
-        }
-    }
+    await db.from('typing').upsert({
+        sender_code: myCode,
+        receiver_code: currentPartner,
+        is_typing: isTyping,
+        updated_at: new Date()
+    }, { onConflict: 'sender_code,receiver_code' })
 }
 
-// Check if partner is typing
+function onTyping() {
+    setTyping(true)
+    if (typingTimeout) clearTimeout(typingTimeout)
+    typingTimeout = setTimeout(() => setTyping(false), 2000)
+}
+
 async function checkTyping() {
     const myCode = localStorage.getItem('ghostCode')
     if (!myCode || !currentPartner) return
+    const { data } = await db.from('typing')
+        .select('*')
+        .eq('sender_code', currentPartner)
+        .eq('receiver_code', myCode)
+        .single()
 
-    try {
-        const { data } = await db
-            .from('typing')
-            .select('*')
-            .eq('sender_code', currentPartner)
-            .eq('receiver_code', myCode)
-            .maybeSingle()
-
-        const indicator = document.getElementById('typingIndicator')
-        if (indicator && data && data.is_typing) {
+    const indicator = document.getElementById('typingIndicator')
+    if (indicator) {
+        if (data && data.is_typing) {
             const diff = new Date() - new Date(data.updated_at)
             indicator.textContent = diff < 3000 ? currentPartner + ' is typing...' : ''
-        } else if (indicator) {
+        } else {
             indicator.textContent = ''
         }
-    } catch (error) {
-        console.error('Check typing error:', error)
     }
 }
 
-// Start chat with another ghost
+// Reply
+let replyingTo = null
+
+function replyTo(msgId, msgText, sender) {
+    replyingTo = { id: msgId, text: msgText, sender }
+    const replyBar = document.getElementById('replyBar')
+    if (replyBar) {
+        replyBar.style.display = 'flex'
+        replyBar.innerHTML = `
+            <div class="reply-preview">
+                <span class="reply-sender">${sender}</span>
+                <span class="reply-text">${msgText.substring(0, 50)}${msgText.length > 50 ? '...' : ''}</span>
+            </div>
+            <i class="fa-solid fa-xmark" onclick="cancelReply()"></i>
+        `
+    }
+}
+
+function cancelReply() {
+    replyingTo = null
+    const replyBar = document.getElementById('replyBar')
+    if (replyBar) replyBar.style.display = 'none'
+}
+
+// State
+let currentPartner = null
+let pollingInterval = null
+
+// Show ghost code
+async function showMyCode() {
+    const code = localStorage.getItem('ghostCode')
+    const el = document.getElementById('myCode')
+    if (el && code) el.textContent = 'Your Code: ' + code
+
+    const lastPartner = localStorage.getItem('lastPartner')
+    if (lastPartner) {
+        currentPartner = lastPartner
+        const searchInput = document.getElementById('searchCode')
+        if (searchInput) searchInput.value = lastPartner
+
+        const { data: partnerInfo } = await db.from('users').select('last_seen').eq('code', lastPartner).single()
+        const statusEl = document.getElementById('connectionStatus')
+        if (statusEl) statusEl.textContent = lastPartner + ' — ' + (partnerInfo ? formatLastSeen(partnerInfo.last_seen) : 'Unknown')
+
+        loadMessages()
+    }
+}
+
+// Notifications
+async function requestNotifications() {
+    if ('Notification' in window) await Notification.requestPermission()
+}
+
+function showNotification(sender, msg) {
+    if (Notification.permission === 'granted') {
+        new Notification('👻 GhostChat', { body: `${sender}: ${msg}`, icon: '👻' })
+    }
+}
+
+// Start chat
 async function startChat() {
-    const codeInput = document.getElementById('searchCode')
-    const code = codeInput ? codeInput.value.trim() : ''
-    if (!code) {
-        showMessage('Please enter a Ghost Code!')
-        return
-    }
+    const code = document.getElementById('searchCode').value.trim()
+    if (!code) return
 
-    if (code === localStorage.getItem('ghostCode')) {
-        showMessage('❌ You cannot chat with yourself!')
-        return
-    }
+    const { data } = await db.from('users').select('*').eq('code', code).single()
 
-    showLoading('connectionStatus', true)
-
-    try {
-        const { data, error } = await db
-            .from('users')
-            .select('code, last_seen, is_online')
-            .eq('code', code)
-            .maybeSingle()
-
-        if (error) {
-            showMessage('❌ Error finding user: ' + error.message)
-        } else if (data) {
-            currentPartner = code
-            localStorage.setItem('lastPartner', code)
-            const chatBox = document.getElementById('chatBox')
-            if (chatBox) chatBox.innerHTML = ''
-
-            const statusEl = document.getElementById('connectionStatus')
-            if (statusEl) {
-                statusEl.textContent = code + ' — ' + formatLastSeen(data.last_seen, data.is_online)
-            }
-
-            loadMessages()
-            showMessage('Connected to ' + code, false)
-        } else {
-            showMessage('❌ Ghost Code not found!')
-        }
-    } catch (error) {
-        console.error('Start chat error:', error)
-        showMessage('❌ Network error. Please try again.')
-    } finally {
-        showLoading('connectionStatus', false)
+    if (data) {
+        currentPartner = code
+        localStorage.setItem('lastPartner', code)
+        const chatBox = document.getElementById('chatBox')
+        if (chatBox) chatBox.innerHTML = ''
+        const statusEl = document.getElementById('connectionStatus')
+        if (statusEl) statusEl.textContent = code + ' — ' + formatLastSeen(data.last_seen)
+        loadMessages()
+    } else {
+        alert('Ghost Code not found!')
     }
 }
 
-// Send message with validation
+// Send message
 async function sendMessage() {
     const input = document.getElementById('msgInput')
-    const text = input ? input.value.trim() : ''
-    if (!text) return
-    if (!currentPartner) {
-        showMessage('Please connect to a chat partner first!')
-        return
-    }
+    const text = input.value.trim()
+    if (!text || !currentPartner) return
 
     const myCode = localStorage.getItem('ghostCode')
-    if (!myCode) {
-        window.location.href = 'login.html'
-        return
+
+    const msgData = {
+        sender_code: myCode,
+        receiver_code: currentPartner,
+        message: text,
+        is_deleted: false,
+        is_read: false
     }
 
-    // Clear typing status
-    await setTyping(false)
-
-    try {
-        const { error } = await db.from('messages').insert({
-            sender_code: myCode,
-            receiver_code: currentPartner,
-            message: text,
-            is_deleted: false,
-            is_read: false,
-            created_at: new Date()
-        })
-
-        if (error) {
-            console.error('Send error:', error)
-            showMessage('❌ Failed to send message: ' + error.message)
-            return
-        }
-
-        if (input) input.value = ''
-        loadMessages()
-        
-        // Auto-resize textarea
-        input.style.height = 'auto'
-    } catch (error) {
-        console.error('Send error:', error)
-        showMessage('❌ Network error. Please try again.')
+    if (replyingTo) {
+        msgData.reply_to = replyingTo.id
+        msgData.reply_preview = replyingTo.text.substring(0, 100)
     }
+
+    const { error } = await db.from('messages').insert(msgData)
+    if (error) { console.log('Send error:', error); return }
+
+    input.value = ''
+    cancelReply()
+    setTyping(false)
+    loadMessages()
 }
 
-// Auto-resize textarea
-function autoResizeTextarea() {
-    const textarea = document.getElementById('msgInput')
-    if (textarea) {
-        textarea.style.height = 'auto'
-        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px'
-    }
-}
-
-// Load messages with XSS protection
+// Load messages
 async function loadMessages() {
     const myCode = localStorage.getItem('ghostCode')
     if (!currentPartner || !myCode) return
 
-    try {
-        const { data, error } = await db
-            .from('messages')
-            .select('*')
-            .or(`and(sender_code.eq.${myCode},receiver_code.eq.${currentPartner}),and(sender_code.eq.${currentPartner},receiver_code.eq.${myCode})`)
-            .eq('is_deleted', false)
-            .order('created_at', { ascending: true })
+    const { data, error } = await db
+        .from('messages')
+        .select('*')
+        .or(`sender_code.eq.${myCode},sender_code.eq.${currentPartner}`)
+        .or(`receiver_code.eq.${myCode},receiver_code.eq.${currentPartner}`)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: true })
 
-        if (error) {
-            console.error('Load error:', error)
-            return
+    if (error) { console.log('Load error:', error); return }
+
+    const chatBox = document.getElementById('chatBox')
+    if (!chatBox) return
+
+    if (!data || data.length === 0) {
+        chatBox.innerHTML = '<p style="text-align:center;color:#555;padding:20px">No messages yet!</p>'
+        return
+    }
+
+    const wasAtBottom = chatBox.scrollHeight - chatBox.clientHeight <= chatBox.scrollTop + 50
+    chatBox.innerHTML = ''
+
+    data.forEach(msg => {
+        const isMe = msg.sender_code === myCode
+        const div = document.createElement('div')
+        div.classList.add(isMe ? 'msg-sent' : 'msg-received')
+        div.dataset.id = msg.id
+
+        let replyHtml = ''
+        if (msg.reply_preview) {
+            replyHtml = `<div class="reply-quote">${msg.reply_preview}</div>`
         }
 
-        const chatBox = document.getElementById('chatBox')
-        if (!chatBox) return
+        div.innerHTML = `
+            <span class="msg-sender">${isMe ? 'You' : msg.sender_code}</span>
+            ${replyHtml}
+            <span class="msg-text">${msg.message}</span>
+            <div class="msg-actions">
+                <i class="fa-solid fa-reply" onclick="replyTo(${msg.id}, '${msg.message.replace(/'/g, "\\'")}', '${isMe ? 'You' : msg.sender_code}')"></i>
+            </div>
+        `
+        chatBox.appendChild(div)
+    })
 
-        if (!data || data.length === 0) {
-            chatBox.innerHTML = '<p style="text-align:center;color:#555;padding:20px">✨ No messages yet! Send a message to start chatting ✨</p>'
-            return
+    if (wasAtBottom) chatBox.scrollTop = chatBox.scrollHeight
+
+    // Mark as read
+    await db.from('messages')
+        .update({ is_read: true })
+        .eq('receiver_code', myCode)
+        .eq('sender_code', currentPartner)
+        .eq('is_read', false)
+
+    // Auto delete if enabled
+    if (localStorage.getItem('autoDelete') === 'true') {
+        const myMsgs = data.filter(m => m.sender_code === myCode)
+        const theirMsgs = data.filter(m => m.sender_code === currentPartner)
+        if (myMsgs.length > 0 && theirMsgs.length > 0) {
+            const lastTheirMsg = theirMsgs[theirMsgs.length - 1]
+            const toDelete = myMsgs.filter(m => new Date(m.created_at) < new Date(lastTheirMsg.created_at))
+            if (toDelete.length > 0) {
+                await db.from('messages').update({ is_deleted: true }).in('id', toDelete.map(m => m.id))
+            }
         }
-
-        chatBox.innerHTML = ''
-
-        data.forEach(msg => {
-            const div = document.createElement('div')
-            div.classList.add(msg.sender_code === myCode ? 'msg-sent' : 'msg-received')
-            // Escape HTML to prevent XSS
-            const senderName = msg.sender_code === myCode ? 'You' : escapeHtml(msg.sender_code)
-            const messageText = escapeHtml(msg.message)
-            div.innerHTML = `<span class="msg-sender">${senderName}</span>${messageText}`
-            chatBox.appendChild(div)
-        })
-
-        chatBox.scrollTop = chatBox.scrollHeight
-
-        // Mark received messages as read
-        await db.from('messages')
-            .update({ is_read: true })
-            .eq('receiver_code', myCode)
-            .eq('sender_code', currentPartner)
-            .eq('is_read', false)
-    } catch (error) {
-        console.error('Load messages error:', error)
     }
 }
 
-// Poll for new messages (consider switching to Realtime)
+// Polling
 function subscribeToMessages() {
     if (pollingInterval) clearInterval(pollingInterval)
     pollingInterval = setInterval(async () => {
@@ -583,48 +380,155 @@ function subscribeToMessages() {
             await loadMessages()
             await checkTyping()
         }
-    }, 3000) // Increased to 3 seconds to reduce load
+    }, 2000)
 }
 
-// Update partner last seen periodically
+// Update partner status
 function updatePartnerStatus() {
     setInterval(async () => {
         if (currentPartner) {
-            try {
-                const { data } = await db
-                    .from('users')
-                    .select('last_seen, is_online')
-                    .eq('code', currentPartner)
-                    .maybeSingle()
-
-                const statusEl = document.getElementById('connectionStatus')
-                if (statusEl && data) {
-                    statusEl.textContent = currentPartner + ' — ' + formatLastSeen(data.last_seen, data.is_online)
-                }
-            } catch (error) {
-                console.error('Update partner status error:', error)
-            }
+            const { data } = await db.from('users').select('last_seen').eq('code', currentPartner).single()
+            const statusEl = document.getElementById('connectionStatus')
+            if (statusEl && data) statusEl.textContent = currentPartner + ' — ' + formatLastSeen(data.last_seen)
         }
     }, 15000)
 }
 
-// ==================== CHATS LIST FUNCTIONS ====================
+// Settings
+function loadSettings() {
+    const autoDelete = localStorage.getItem('autoDelete') === 'true'
+    const toggle = document.getElementById('autoDeleteToggle')
+    if (toggle) toggle.checked = autoDelete
+}
 
-// Load chats list
+function saveSettings() {
+    const toggle = document.getElementById('autoDeleteToggle')
+    if (toggle) {
+        localStorage.setItem('autoDelete', toggle.checked)
+        const msg = document.getElementById('settingsMessage')
+        if (msg) {
+            msg.textContent = '✅ Settings saved!'
+            setTimeout(() => msg.textContent = '', 2000)
+        }
+    }
+}
+
+function logout() {
+    localStorage.clear()
+    window.location.href = 'index.html'
+}
+
+// Load chats
 async function loadChats() {
     const myCode = localStorage.getItem('ghostCode')
-    if (!myCode) {
-        window.location.href = 'login.html'
+    if (!myCode) { window.location.href = 'login.html'; return }
+
+    const codeBar = document.getElementById('myCodeBar')
+    if (codeBar) codeBar.textContent = '👻 Your Code: ' + myCode
+
+    const { data, error } = await db
+        .from('messages')
+        .select('*')
+        .or(`sender_code.eq.${myCode},receiver_code.eq.${myCode}`)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+
+    if (error) { console.log('Error:', error); return }
+
+    const chatsList = document.getElementById('chatsList')
+    if (!chatsList) return
+
+    if (!data || data.length === 0) {
+        chatsList.innerHTML = `
+            <div class="no-chats">
+                <i class="fa-solid fa-ghost"></i>
+                No chats yet! Start a new chat 👆
+            </div>
+        `
         return
     }
 
-    const codeBar = document.getElementById('myCodeBar')
-    if (codeBar) {
-        codeBar.innerHTML = `👻 Your Code: ${myCode} <i class="fa-regular fa-copy" onclick="copyToClipboard('${myCode}')" style="cursor:pointer; margin-left:8px;"></i> <i class="fa-solid fa-right-from-bracket" onclick="logout()" style="cursor:pointer; margin-left:12px; color:#ef4444;"></i>`
-    }
+    const partners = {}
+    data.forEach(msg => {
+        const partner = msg.sender_code === myCode ? msg.receiver_code : msg.sender_code
+        if (!partners[partner]) {
+            partners[partner] = { code: partner, lastMessage: msg.message, time: new Date(msg.created_at), unread: 0 }
+        }
+        if (msg.receiver_code === myCode && !msg.is_read) partners[partner].unread++
+    })
 
-    try {
-        const { data, error } = await db
-            .from('messages')
-            .select('*')
-            .or(`sender_code.eq.${myC
+    chatsList.innerHTML = ''
+    Object.values(partners).forEach(partner => {
+        const item = document.createElement('div')
+        item.classList.add('chat-item')
+        item.dataset.code = partner.code
+        item.innerHTML = `
+            <div class="chat-avatar">👻</div>
+            <div class="chat-info">
+                <div class="chat-name">${partner.code}</div>
+                <div class="chat-preview">${partner.lastMessage}</div>
+            </div>
+            <div class="chat-meta">
+                <div class="chat-time">${formatTime(partner.time)}</div>
+                ${partner.unread > 0 ? `<div class="unread-badge">${partner.unread}</div>` : ''}
+            </div>
+        `
+        item.onclick = () => openChat(partner.code)
+        chatsList.appendChild(item)
+    })
+}
+
+function formatTime(date) {
+    const now = new Date()
+    const diff = now - date
+    if (diff < 60000) return 'Just now'
+    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago'
+    if (diff < 86400000) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleDateString()
+}
+
+function openChat(code) {
+    localStorage.setItem('lastPartner', code)
+    window.location.href = 'chat.html'
+}
+
+function toggleSearch() {
+    const bar = document.getElementById('searchBar')
+    if (bar) bar.style.display = bar.style.display === 'none' ? 'block' : 'none'
+}
+
+function filterChats() {
+    const query = document.getElementById('searchInput').value.toLowerCase()
+    document.querySelectorAll('.chat-item').forEach(item => {
+        item.style.display = item.dataset.code.toLowerCase().includes(query) ? 'flex' : 'none'
+    })
+}
+
+window.addEventListener('beforeunload', () => {
+    if (pollingInterval) clearInterval(pollingInterval)
+    setTyping(false)
+})
+
+// Run on chat page
+if (document.getElementById('chatBox')) {
+    showMyCode()
+    subscribeToMessages()
+    requestNotifications()
+    updateLastSeen()
+    updatePartnerStatus()
+    setInterval(updateLastSeen, 30000)
+}
+
+// Run on chats page
+if (document.getElementById('chatsList')) {
+    loadChats()
+    updateLastSeen()
+    setInterval(updateLastSeen, 30000)
+    const chatsInterval = setInterval(loadChats, 5000)
+    window.addEventListener('beforeunload', () => clearInterval(chatsInterval))
+}
+
+// Run on settings page
+if (document.getElementById('autoDeleteToggle')) {
+    loadSettings()
+}
