@@ -171,7 +171,7 @@ input:focus, textarea:focus {
 .chat-container {
     width: 100%;
     max-width: 500px;
-    height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     background: #0a0a0a;
