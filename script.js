@@ -31,39 +31,27 @@ function togglePassword(inputId, icon) {
     }
 }
 
+// Auto resize textarea
+function autoResize(el) {
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+}
+
 // Sign up
 async function signUp() {
     const email = document.getElementById('email').value
     const password = document.getElementById('password').value
     const message = document.getElementById('message')
 
-    if (!email || !password) {
-        message.style.color = 'red'
-        message.textContent = 'Please fill all fields!'
-        return
-    }
-    if (!validateEmail(email)) {
-        message.style.color = 'red'
-        message.textContent = '❌ Invalid email!'
-        return
-    }
-    if (!validatePassword(password)) {
-        message.style.color = 'red'
-        message.textContent = '❌ Password must be 8+ characters!'
-        return
-    }
+    if (!email || !password) { message.style.color = 'red'; message.textContent = 'Please fill all fields!'; return }
+    if (!validateEmail(email)) { message.style.color = 'red'; message.textContent = '❌ Invalid email!'; return }
+    if (!validatePassword(password)) { message.style.color = 'red'; message.textContent = '❌ Password must be 8+ characters!'; return }
 
     const { data: existingUser } = await db.from('users').select('email').eq('email', email).maybeSingle()
-    if (existingUser) {
-        message.style.color = 'red'
-        message.textContent = '❌ Email already registered!'
-        return
-    }
+    if (existingUser) { message.style.color = 'red'; message.textContent = '❌ Email already registered!'; return }
 
     const ghostCode = generateGhostCode()
-    const { error } = await db.from('users').insert({
-        email, password, code: ghostCode, created_at: new Date()
-    })
+    const { error } = await db.from('users').insert({ email, password, code: ghostCode, created_at: new Date() })
 
     if (!error) {
         message.style.color = '#7c3aed'
@@ -83,11 +71,7 @@ async function login() {
     const password = document.getElementById('password').value
     const message = document.getElementById('message')
 
-    if (!email || !password) {
-        message.style.color = 'red'
-        message.textContent = 'Please fill all fields!'
-        return
-    }
+    if (!email || !password) { message.style.color = 'red'; message.textContent = 'Please fill all fields!'; return }
 
     const { data } = await db.from('users').select('*').eq('email', email).eq('password', password).single()
 
@@ -109,18 +93,10 @@ async function resetPassword() {
     const email = document.getElementById('resetEmail').value
     const message = document.getElementById('message')
 
-    if (!email) {
-        message.style.color = 'red'
-        message.textContent = 'Please enter your email!'
-        return
-    }
+    if (!email) { message.style.color = 'red'; message.textContent = 'Please enter your email!'; return }
 
     const { data: user } = await db.from('users').select('email').eq('email', email).maybeSingle()
-    if (!user) {
-        message.style.color = 'red'
-        message.textContent = '❌ Email not found!'
-        return
-    }
+    if (!user) { message.style.color = 'red'; message.textContent = '❌ Email not found!'; return }
 
     const tempPassword = Math.random().toString(36).slice(-8)
     const { error } = await db.from('users').update({ password: tempPassword }).eq('email', email)
@@ -175,6 +151,7 @@ function onTyping() {
 async function checkTyping() {
     const myCode = localStorage.getItem('ghostCode')
     if (!myCode || !currentPartner) return
+
     const { data } = await db.from('typing')
         .select('*')
         .eq('sender_code', currentPartner)
@@ -182,13 +159,20 @@ async function checkTyping() {
         .single()
 
     const indicator = document.getElementById('typingIndicator')
-    if (indicator) {
-        if (data && data.is_typing) {
-            const diff = new Date() - new Date(data.updated_at)
-            indicator.textContent = diff < 3000 ? currentPartner + ' is typing...' : ''
+    if (!indicator) return
+
+    if (data && data.is_typing) {
+        const diff = new Date() - new Date(data.updated_at)
+        if (diff < 3000) {
+            indicator.textContent = '✏️ ' + currentPartner + ' is typing...'
+            indicator.style.display = 'block'
         } else {
             indicator.textContent = ''
+            indicator.style.display = 'none'
         }
+    } else {
+        indicator.textContent = ''
+        indicator.style.display = 'none'
     }
 }
 
@@ -203,11 +187,12 @@ function replyTo(msgId, msgText, sender) {
         replyBar.innerHTML = `
             <div class="reply-preview">
                 <span class="reply-sender">${sender}</span>
-                <span class="reply-text">${msgText.substring(0, 50)}${msgText.length > 50 ? '...' : ''}</span>
+                <span class="reply-text">${msgText.substring(0, 60)}${msgText.length > 60 ? '...' : ''}</span>
             </div>
             <i class="fa-solid fa-xmark" onclick="cancelReply()"></i>
         `
     }
+    document.getElementById('msgInput').focus()
 }
 
 function cancelReply() {
@@ -216,15 +201,46 @@ function cancelReply() {
     if (replyBar) replyBar.style.display = 'none'
 }
 
+// Swipe to reply
+function addSwipeToReply(div, msgId, msgText, sender) {
+    let startX = 0
+    let currentX = 0
+    let isSwiping = false
+
+    div.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX
+        isSwiping = true
+    }, { passive: true })
+
+    div.addEventListener('touchmove', (e) => {
+        if (!isSwiping) return
+        currentX = e.touches[0].clientX
+        const diff = startX - currentX
+        if (diff > 0 && diff < 80) {
+            div.style.transform = `translateX(-${diff}px)`
+            div.style.transition = 'none'
+        }
+    }, { passive: true })
+
+    div.addEventListener('touchend', () => {
+        isSwiping = false
+        const diff = startX - currentX
+        if (diff > 50) replyTo(msgId, msgText, sender)
+        div.style.transform = 'translateX(0)'
+        div.style.transition = 'transform 0.2s ease'
+    })
+}
+
 // State
 let currentPartner = null
 let pollingInterval = null
+let lastMessageCount = 0
 
 // Show ghost code
 async function showMyCode() {
     const code = localStorage.getItem('ghostCode')
     const el = document.getElementById('myCode')
-    if (el && code) el.textContent = 'Your Code: ' + code
+    if (el && code) el.textContent = code
 
     const lastPartner = localStorage.getItem('lastPartner')
     if (lastPartner) {
@@ -261,6 +277,7 @@ async function startChat() {
     if (data) {
         currentPartner = code
         localStorage.setItem('lastPartner', code)
+        lastMessageCount = 0
         const chatBox = document.getElementById('chatBox')
         if (chatBox) chatBox.innerHTML = ''
         const statusEl = document.getElementById('connectionStatus')
@@ -296,12 +313,13 @@ async function sendMessage() {
     if (error) { console.log('Send error:', error); return }
 
     input.value = ''
+    input.style.height = 'auto'
     cancelReply()
     setTyping(false)
     loadMessages()
 }
 
-// Load messages
+// Load messages - fixed query
 async function loadMessages() {
     const myCode = localStorage.getItem('ghostCode')
     if (!currentPartner || !myCode) return
@@ -309,8 +327,7 @@ async function loadMessages() {
     const { data, error } = await db
         .from('messages')
         .select('*')
-        .or(`sender_code.eq.${myCode},sender_code.eq.${currentPartner}`)
-        .or(`receiver_code.eq.${myCode},receiver_code.eq.${currentPartner}`)
+        .or(`sender_code.eq.${myCode},receiver_code.eq.${myCode}`)
         .eq('is_deleted', false)
         .order('created_at', { ascending: true })
 
@@ -319,15 +336,30 @@ async function loadMessages() {
     const chatBox = document.getElementById('chatBox')
     if (!chatBox) return
 
-    if (!data || data.length === 0) {
+    // Filter messages between me and current partner only
+    const filtered = (data || []).filter(msg =>
+        (msg.sender_code === myCode && msg.receiver_code === currentPartner) ||
+        (msg.sender_code === currentPartner && msg.receiver_code === myCode)
+    )
+
+    if (filtered.length === 0) {
         chatBox.innerHTML = '<p style="text-align:center;color:#555;padding:20px">No messages yet!</p>'
         return
     }
 
+    // Notify on new messages
+    if (filtered.length > lastMessageCount) {
+        const newMsgs = filtered.slice(lastMessageCount)
+        newMsgs.forEach(msg => {
+            if (msg.receiver_code === myCode) showNotification(msg.sender_code, msg.message)
+        })
+    }
+    lastMessageCount = filtered.length
+
     const wasAtBottom = chatBox.scrollHeight - chatBox.clientHeight <= chatBox.scrollTop + 50
     chatBox.innerHTML = ''
 
-    data.forEach(msg => {
+    filtered.forEach(msg => {
         const isMe = msg.sender_code === myCode
         const div = document.createElement('div')
         div.classList.add(isMe ? 'msg-sent' : 'msg-received')
@@ -342,10 +374,9 @@ async function loadMessages() {
             <span class="msg-sender">${isMe ? 'You' : msg.sender_code}</span>
             ${replyHtml}
             <span class="msg-text">${msg.message}</span>
-            <div class="msg-actions">
-                <i class="fa-solid fa-reply" onclick="replyTo(${msg.id}, '${msg.message.replace(/'/g, "\\'")}', '${isMe ? 'You' : msg.sender_code}')"></i>
-            </div>
         `
+
+        addSwipeToReply(div, msg.id, msg.message, isMe ? 'You' : msg.sender_code)
         chatBox.appendChild(div)
     })
 
@@ -360,8 +391,8 @@ async function loadMessages() {
 
     // Auto delete if enabled
     if (localStorage.getItem('autoDelete') === 'true') {
-        const myMsgs = data.filter(m => m.sender_code === myCode)
-        const theirMsgs = data.filter(m => m.sender_code === currentPartner)
+        const myMsgs = filtered.filter(m => m.sender_code === myCode)
+        const theirMsgs = filtered.filter(m => m.sender_code === currentPartner)
         if (myMsgs.length > 0 && theirMsgs.length > 0) {
             const lastTheirMsg = theirMsgs[theirMsgs.length - 1]
             const toDelete = myMsgs.filter(m => new Date(m.created_at) < new Date(lastTheirMsg.created_at))
@@ -372,15 +403,40 @@ async function loadMessages() {
     }
 }
 
-// Polling
+// Supabase Realtime subscription
 function subscribeToMessages() {
+    const myCode = localStorage.getItem('ghostCode')
+    if (!myCode) return
+
+    // Polling only for typing indicator every 5 seconds
     if (pollingInterval) clearInterval(pollingInterval)
     pollingInterval = setInterval(async () => {
-        if (currentPartner) {
-            await loadMessages()
-            await checkTyping()
-        }
-    }, 2000)
+        if (currentPartner) await checkTyping()
+    }, 5000)
+
+    // Realtime for instant messages
+    db.channel('ghostchat-' + myCode)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages'
+            },
+            async (payload) => {
+                const msg = payload.new
+                const myCode = localStorage.getItem('ghostCode')
+                if (msg.sender_code === myCode || msg.receiver_code === myCode) {
+                    await loadMessages()
+                    if (msg.receiver_code === myCode) {
+                        showNotification(msg.sender_code, msg.message)
+                    }
+                }
+            }
+        )
+        .subscribe((status) => {
+            console.log('Realtime status:', status)
+        })
 }
 
 // Update partner status
@@ -391,7 +447,7 @@ function updatePartnerStatus() {
             const statusEl = document.getElementById('connectionStatus')
             if (statusEl && data) statusEl.textContent = currentPartner + ' — ' + formatLastSeen(data.last_seen)
         }
-    }, 15000)
+    }, 20000)
 }
 
 // Settings
