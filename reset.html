@@ -6,6 +6,7 @@
     <title>GhostChat - Reset Password</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <script src="supabase.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -13,14 +14,230 @@
     <div class="container">
         <div class="logo">👻 GhostChat</div>
         <p class="tagline">Reset Your Password</p>
-        <div class="form-card">
-            <p style="color:#666;font-size:13px;margin-bottom:15px">Enter your email and we'll give you a temporary password!</p>
+
+        <!-- Step 1 - Enter Email -->
+        <div id="step1" class="form-card">
+            <p style="color:#666;font-size:13px;margin-bottom:15px">
+                Enter your email and we'll send you a 6-digit reset code!
+            </p>
             <input type="email" id="resetEmail" placeholder="Enter your email">
-            <button onclick="resetPassword()" class="btn-primary">Get Temporary Password</button>
+            <button onclick="sendOTP()" class="btn-primary" id="sendBtn">
+                Send Reset Code
+            </button>
             <p class="switch"><a href="login.html">← Back to Login</a></p>
         </div>
-        <div id="message"></div>
+
+        <!-- Step 2 - Enter OTP -->
+        <div id="step2" class="form-card" style="display:none">
+            <p style="color:#666;font-size:13px;margin-bottom:5px">
+                We sent a 6-digit code to:
+            </p>
+            <p id="emailDisplay" style="color:#7c3aed;font-size:13px;margin-bottom:15px"></p>
+            <input type="text" id="otpInput" placeholder="Enter 6-digit code" maxlength="6"
+                style="text-align:center;font-size:24px;letter-spacing:8px">
+            <button onclick="verifyOTP()" class="btn-primary">Verify Code</button>
+            <button onclick="resendOTP()" class="btn-secondary" id="resendBtn">
+                Resend Code
+            </button>
+            <p class="switch"><a href="#" onclick="goBack()">← Change Email</a></p>
+        </div>
+
+        <!-- Step 3 - New Password -->
+        <div id="step3" class="form-card" style="display:none">
+            <p style="color:#666;font-size:13px;margin-bottom:15px">
+                ✅ Code verified! Set your new password.
+            </p>
+            <div class="password-wrap">
+                <input type="password" id="newPassword" placeholder="Enter new password">
+                <i class="fa-solid fa-eye" onclick="togglePassword('newPassword', this)"></i>
+            </div>
+            <div class="password-wrap">
+                <input type="password" id="confirmPassword" placeholder="Confirm new password">
+                <i class="fa-solid fa-eye" onclick="togglePassword('confirmPassword', this)"></i>
+            </div>
+            <button onclick="updatePassword()" class="btn-primary">Update Password</button>
+        </div>
+
+        <div id="message" style="margin-top:15px;font-size:13px;text-align:center"></div>
     </div>
+
     <script src="script.js"></script>
+    <script>
+        // Initialize EmailJS
+        emailjs.init('b68xVAGFF0o24XwNr')
+
+        let generatedOTP = null
+        let otpExpiry = null
+        let verifiedEmail = null
+
+        // Generate 6 digit OTP
+        function generateOTP() {
+            return Math.floor(100000 + Math.random() * 900000).toString()
+        }
+
+        // Send OTP
+        async function sendOTP() {
+            const email = document.getElementById('resetEmail').value.trim()
+            const message = document.getElementById('message')
+            const btn = document.getElementById('sendBtn')
+
+            if (!email) {
+                message.style.color = 'red'
+                message.textContent = 'Please enter your email!'
+                return
+            }
+
+            // Check if email exists
+            const { data: user } = await db.from('users').select('email').eq('email', email).maybeSingle()
+            if (!user) {
+                message.style.color = 'red'
+                message.textContent = '❌ Email not found!'
+                return
+            }
+
+            btn.textContent = 'Sending...'
+            btn.disabled = true
+
+            generatedOTP = generateOTP()
+            otpExpiry = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+            verifiedEmail = email
+
+            try {
+                await emailjs.send('service_c1dugow', 'template_6hp919q', {
+                    to_email: email,
+                    otp: generatedOTP
+                })
+
+                message.style.color = '#7c3aed'
+                message.textContent = '✅ Code sent! Check your email!'
+
+                document.getElementById('step1').style.display = 'none'
+                document.getElementById('step2').style.display = 'block'
+                document.getElementById('emailDisplay').textContent = email
+
+                // Start resend countdown
+                startResendCountdown()
+
+            } catch (error) {
+                message.style.color = 'red'
+                message.textContent = '❌ Failed to send email. Try again!'
+                btn.textContent = 'Send Reset Code'
+                btn.disabled = false
+            }
+        }
+
+        // Verify OTP
+        function verifyOTP() {
+            const input = document.getElementById('otpInput').value.trim()
+            const message = document.getElementById('message')
+
+            if (!input) {
+                message.style.color = 'red'
+                message.textContent = 'Please enter the code!'
+                return
+            }
+
+            if (new Date() > otpExpiry) {
+                message.style.color = 'red'
+                message.textContent = '❌ Code expired! Request a new one.'
+                return
+            }
+
+            if (input !== generatedOTP) {
+                message.style.color = 'red'
+                message.textContent = '❌ Wrong code! Try again.'
+                return
+            }
+
+            message.style.color = '#7c3aed'
+            message.textContent = '✅ Code verified!'
+
+            document.getElementById('step2').style.display = 'none'
+            document.getElementById('step3').style.display = 'block'
+        }
+
+        // Update password
+        async function updatePassword() {
+            const newPassword = document.getElementById('newPassword').value
+            const confirmPassword = document.getElementById('confirmPassword').value
+            const message = document.getElementById('message')
+
+            if (!newPassword || !confirmPassword) {
+                message.style.color = 'red'
+                message.textContent = 'Please fill all fields!'
+                return
+            }
+
+            if (newPassword.length < 8) {
+                message.style.color = 'red'
+                message.textContent = '❌ Password must be 8+ characters!'
+                return
+            }
+
+            if (newPassword !== confirmPassword) {
+                message.style.color = 'red'
+                message.textContent = '❌ Passwords do not match!'
+                return
+            }
+
+            const { error } = await db.from('users').update({ password: newPassword }).eq('email', verifiedEmail)
+
+            if (!error) {
+                message.style.color = '#7c3aed'
+                message.textContent = '✅ Password updated successfully!'
+                setTimeout(() => { window.location.href = 'login.html' }, 2000)
+            } else {
+                message.style.color = 'red'
+                message.textContent = '❌ Error updating password!'
+            }
+        }
+
+        // Resend OTP
+        async function resendOTP() {
+            generatedOTP = generateOTP()
+            otpExpiry = new Date(Date.now() + 10 * 60 * 1000)
+            const message = document.getElementById('message')
+
+            try {
+                await emailjs.send('service_c1dugow', 'template_6hp919q', {
+                    to_email: verifiedEmail,
+                    otp: generatedOTP
+                })
+                message.style.color = '#7c3aed'
+                message.textContent = '✅ New code sent!'
+                startResendCountdown()
+            } catch (error) {
+                message.style.color = 'red'
+                message.textContent = '❌ Failed to resend. Try again!'
+            }
+        }
+
+        // Resend countdown (60 seconds)
+        function startResendCountdown() {
+            const btn = document.getElementById('resendBtn')
+            let seconds = 60
+            btn.disabled = true
+            btn.textContent = `Resend in ${seconds}s`
+
+            const interval = setInterval(() => {
+                seconds--
+                btn.textContent = `Resend in ${seconds}s`
+                if (seconds <= 0) {
+                    clearInterval(interval)
+                    btn.disabled = false
+                    btn.textContent = 'Resend Code'
+                }
+            }, 1000)
+        }
+
+        // Go back to step 1
+        function goBack() {
+            document.getElementById('step2').style.display = 'none'
+            document.getElementById('step1').style.display = 'block'
+            document.getElementById('sendBtn').textContent = 'Send Reset Code'
+            document.getElementById('sendBtn').disabled = false
+            document.getElementById('message').textContent = ''
+        }
+    </script>
 </body>
 </html>
