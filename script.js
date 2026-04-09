@@ -202,32 +202,39 @@ function cancelReply() {
 }
 
 // Swipe to reply
-function addSwipeToReply(div, msgId, msgText, sender) {
-    let startX = 0
-    let currentX = 0
-    let isSwiping = false
+function addSwipeListeners() {
+    const chatBox = document.getElementById('chatBox')
+    if (!chatBox) return
 
-    div.addEventListener('touchstart', (e) => {
+    let startX = 0
+    let target = null
+
+    chatBox.addEventListener('touchstart', (e) => {
         startX = e.touches[0].clientX
-        isSwiping = true
+        target = e.target.closest('.msg-sent, .msg-received')
     }, { passive: true })
 
-    div.addEventListener('touchmove', (e) => {
-        if (!isSwiping) return
-        currentX = e.touches[0].clientX
-        const diff = startX - currentX
+    chatBox.addEventListener('touchmove', (e) => {
+        if (!target) return
+        const diff = startX - e.touches[0].clientX
         if (diff > 0 && diff < 80) {
-            div.style.transform = `translateX(-${diff}px)`
-            div.style.transition = 'none'
+            target.style.transform = `translateX(-${diff}px)`
+            target.style.transition = 'none'
         }
     }, { passive: true })
 
-    div.addEventListener('touchend', () => {
-        isSwiping = false
-        const diff = startX - currentX
-        if (diff > 50) replyTo(msgId, msgText, sender)
-        div.style.transform = 'translateX(0)'
-        div.style.transition = 'transform 0.2s ease'
+    chatBox.addEventListener('touchend', (e) => {
+        if (!target) return
+        const diff = startX - e.changedTouches[0].clientX
+        if (diff > 50) {
+            const msgId = target.dataset.id
+            const msgText = target.querySelector('.msg-text').textContent
+            const sender = target.querySelector('.msg-sender').textContent
+            replyTo(msgId, msgText, sender)
+        }
+        target.style.transform = 'translateX(0)'
+        target.style.transition = 'transform 0.2s ease'
+        target = null
     })
 }
 
@@ -252,7 +259,7 @@ async function showMyCode() {
         const statusEl = document.getElementById('connectionStatus')
         if (statusEl) statusEl.textContent = lastPartner + ' — ' + (partnerInfo ? formatLastSeen(partnerInfo.last_seen) : 'Unknown')
 
-        loadMessages()
+        await loadMessages()
     }
 }
 
@@ -262,8 +269,12 @@ async function requestNotifications() {
 }
 
 function showNotification(sender, msg) {
-    if (Notification.permission === 'granted') {
-        new Notification('👻 GhostChat', { body: `${sender}: ${msg}`, icon: '👻' })
+    try {
+        if (Notification.permission === 'granted') {
+            new Notification('👻 GhostChat', { body: `${sender}: ${msg}`, icon: '👻' })
+        }
+    } catch(e) {
+        console.log('Notification error:', e)
     }
 }
 
@@ -278,11 +289,9 @@ async function startChat() {
         currentPartner = code
         localStorage.setItem('lastPartner', code)
         lastMessageCount = 0
-        const chatBox = document.getElementById('chatBox')
-        if (chatBox) chatBox.innerHTML = ''
         const statusEl = document.getElementById('connectionStatus')
         if (statusEl) statusEl.textContent = code + ' — ' + formatLastSeen(data.last_seen)
-        loadMessages()
+        await loadMessages()
     } else {
         alert('Ghost Code not found!')
     }
@@ -316,13 +325,18 @@ async function sendMessage() {
     input.style.height = 'auto'
     cancelReply()
     setTyping(false)
-    loadMessages()
+    await loadMessages()
 }
 
-// Load messages - fixed query
+// Load messages - using innerHTML for reliability
 async function loadMessages() {
     const myCode = localStorage.getItem('ghostCode')
-    if (!currentPartner || !myCode) return
+    if (!myCode) return
+
+    if (!currentPartner) {
+        currentPartner = localStorage.getItem('lastPartner')
+    }
+    if (!currentPartner) return
 
     const { data, error } = await db
         .from('messages')
@@ -336,7 +350,6 @@ async function loadMessages() {
     const chatBox = document.getElementById('chatBox')
     if (!chatBox) return
 
-    // Filter messages between me and current partner only
     const filtered = (data || []).filter(msg =>
         (msg.sender_code === myCode && msg.receiver_code === currentPartner) ||
         (msg.sender_code === currentPartner && msg.receiver_code === myCode)
@@ -356,31 +369,26 @@ async function loadMessages() {
     }
     lastMessageCount = filtered.length
 
-    const wasAtBottom = chatBox.scrollHeight - chatBox.clientHeight <= chatBox.scrollTop + 50
-    chatBox.innerHTML = ''
-
+    // Build HTML string
+    let html = ''
     filtered.forEach(msg => {
         const isMe = msg.sender_code === myCode
-        const div = document.createElement('div')
-        div.classList.add(isMe ? 'msg-sent' : 'msg-received')
-        div.dataset.id = msg.id
+        const side = isMe ? 'msg-sent' : 'msg-received'
+        const sender = isMe ? 'You' : msg.sender_code
+        const replyHtml = msg.reply_preview ?
+            `<div class="reply-quote">${msg.reply_preview}</div>` : ''
 
-        let replyHtml = ''
-        if (msg.reply_preview) {
-            replyHtml = `<div class="reply-quote">${msg.reply_preview}</div>`
-        }
-
-        div.innerHTML = `
-            <span class="msg-sender">${isMe ? 'You' : msg.sender_code}</span>
-            ${replyHtml}
-            <span class="msg-text">${msg.message}</span>
+        html += `
+            <div class="${side}" data-id="${msg.id}">
+                <span class="msg-sender">${sender}</span>
+                ${replyHtml}
+                <span class="msg-text">${msg.message}</span>
+            </div>
         `
-
-        addSwipeToReply(div, msg.id, msg.message, isMe ? 'You' : msg.sender_code)
-        chatBox.appendChild(div)
     })
 
-    if (wasAtBottom) chatBox.scrollTop = chatBox.scrollHeight
+    chatBox.innerHTML = html
+    chatBox.scrollTop = chatBox.scrollHeight
 
     // Mark as read
     await db.from('messages')
@@ -403,18 +411,16 @@ async function loadMessages() {
     }
 }
 
-// Supabase Realtime subscription
+// Realtime + polling for typing
 function subscribeToMessages() {
     const myCode = localStorage.getItem('ghostCode')
     if (!myCode) return
 
-    // Polling only for typing indicator every 5 seconds
     if (pollingInterval) clearInterval(pollingInterval)
     pollingInterval = setInterval(async () => {
         if (currentPartner) await checkTyping()
     }, 5000)
 
-    // Realtime for instant messages
     db.channel('ghostchat-' + myCode)
         .on(
             'postgres_changes',
@@ -427,10 +433,12 @@ function subscribeToMessages() {
                 const msg = payload.new
                 const myCode = localStorage.getItem('ghostCode')
                 if (msg.sender_code === myCode || msg.receiver_code === myCode) {
-                    await loadMessages()
-                    if (msg.receiver_code === myCode) {
-                        showNotification(msg.sender_code, msg.message)
+                    if (!currentPartner) {
+                        currentPartner = msg.sender_code === myCode ? msg.receiver_code : msg.sender_code
+                        localStorage.setItem('lastPartner', currentPartner)
                     }
+                    await loadMessages()
+                    if (msg.receiver_code === myCode) showNotification(msg.sender_code, msg.message)
                 }
             }
         )
@@ -513,25 +521,23 @@ async function loadChats() {
         if (msg.receiver_code === myCode && !msg.is_read) partners[partner].unread++
     })
 
-    chatsList.innerHTML = ''
+    let html = ''
     Object.values(partners).forEach(partner => {
-        const item = document.createElement('div')
-        item.classList.add('chat-item')
-        item.dataset.code = partner.code
-        item.innerHTML = `
-            <div class="chat-avatar">👻</div>
-            <div class="chat-info">
-                <div class="chat-name">${partner.code}</div>
-                <div class="chat-preview">${partner.lastMessage}</div>
-            </div>
-            <div class="chat-meta">
-                <div class="chat-time">${formatTime(partner.time)}</div>
-                ${partner.unread > 0 ? `<div class="unread-badge">${partner.unread}</div>` : ''}
+        html += `
+            <div class="chat-item" data-code="${partner.code}" onclick="openChat('${partner.code}')">
+                <div class="chat-avatar">👻</div>
+                <div class="chat-info">
+                    <div class="chat-name">${partner.code}</div>
+                    <div class="chat-preview">${partner.lastMessage}</div>
+                </div>
+                <div class="chat-meta">
+                    <div class="chat-time">${formatTime(partner.time)}</div>
+                    ${partner.unread > 0 ? `<div class="unread-badge">${partner.unread}</div>` : ''}
+                </div>
             </div>
         `
-        item.onclick = () => openChat(partner.code)
-        chatsList.appendChild(item)
     })
+    chatsList.innerHTML = html
 }
 
 function formatTime(date) {
@@ -572,6 +578,7 @@ if (document.getElementById('chatBox')) {
     requestNotifications()
     updateLastSeen()
     updatePartnerStatus()
+    addSwipeListeners()
     setInterval(updateLastSeen, 30000)
 }
 
