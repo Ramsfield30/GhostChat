@@ -1,3 +1,13 @@
+// Hash password using SHA-256
+async function hashPassword(password) {
+    const encoder = new TextEncoder()
+    const data = encoder.encode(password)
+    const hash = await crypto.subtle.digest('SHA-256', data)
+    return Array.from(new Uint8Array(hash))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+}
+
 // Generate random ghost code
 function generateGhostCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -73,7 +83,7 @@ async function login() {
     const message = document.getElementById('message')
 
     if (!email || !password) { message.style.color = 'red'; message.textContent = 'Please fill all fields!'; return }
-    
+
     const hashedPassword = await hashPassword(password)
     const { data } = await db.from('users').select('*').eq('email', email).eq('password', hashedPassword).single()
 
@@ -90,7 +100,7 @@ async function login() {
     }
 }
 
-// Reset password
+// Reset password (used by script.js resetPassword function - not OTP flow)
 async function resetPassword() {
     const email = document.getElementById('resetEmail').value
     const message = document.getElementById('message')
@@ -101,7 +111,8 @@ async function resetPassword() {
     if (!user) { message.style.color = 'red'; message.textContent = '❌ Email not found!'; return }
 
     const tempPassword = Math.random().toString(36).slice(-8)
-    const { error } = await db.from('users').update({ password: tempPassword }).eq('email', email)
+    const hashedTemp = await hashPassword(tempPassword)
+    const { error } = await db.from('users').update({ password: hashedTemp }).eq('email', email)
 
     if (!error) {
         message.style.color = '#7c3aed'
@@ -163,7 +174,6 @@ async function checkTyping() {
     const statusEl = document.getElementById('connectionStatus')
     if (!statusEl) return
 
-
     if (data && data.is_typing) {
         const diff = new Date() - new Date(data.updated_at)
         if (diff < 3000) {
@@ -171,17 +181,18 @@ async function checkTyping() {
             statusEl.style.color = '#7c3aed'
             return
         }
-    } 
-     
-// Show normal last seen when not typing
+    }
+
+    // Show normal last seen when not typing
     const { data: partnerInfo } = await db.from('users')
         .select('last_seen')
         .eq('code', currentPartner)
         .single()
-    
+
     statusEl.style.color = '#aaa'
     statusEl.textContent = currentPartner + ' — ' + (partnerInfo ? formatLastSeen(partnerInfo.last_seen) : '')
 }
+
 // Reply
 let replyingTo = null
 
@@ -334,7 +345,7 @@ async function sendMessage() {
     await loadMessages()
 }
 
-// Load messages - using innerHTML for reliability
+// Load messages
 async function loadMessages() {
     const myCode = localStorage.getItem('ghostCode')
     if (!myCode) return
@@ -366,7 +377,6 @@ async function loadMessages() {
         return
     }
 
-    // Notify on new messages
     if (filtered.length > lastMessageCount) {
         const newMsgs = filtered.slice(lastMessageCount)
         newMsgs.forEach(msg => {
@@ -375,7 +385,6 @@ async function loadMessages() {
     }
     lastMessageCount = filtered.length
 
-    // Build HTML string
     let html = ''
     filtered.forEach(msg => {
         const isMe = msg.sender_code === myCode
@@ -396,14 +405,12 @@ async function loadMessages() {
     chatBox.innerHTML = html
     chatBox.scrollTop = chatBox.scrollHeight
 
-    // Mark as read
     await db.from('messages')
         .update({ is_read: true })
         .eq('receiver_code', myCode)
         .eq('sender_code', currentPartner)
         .eq('is_read', false)
 
-    // Auto delete if enabled
     if (localStorage.getItem('autoDelete') === 'true') {
         const myMsgs = filtered.filter(m => m.sender_code === myCode)
         const theirMsgs = filtered.filter(m => m.sender_code === currentPartner)
@@ -425,7 +432,7 @@ function subscribeToMessages() {
     if (pollingInterval) clearInterval(pollingInterval)
     pollingInterval = setInterval(async () => {
         if (currentPartner) await checkTyping()
-    }, 5000)
+    }, 3000)
 
     db.channel('ghostchat-' + myCode)
         .on(
@@ -451,17 +458,6 @@ function subscribeToMessages() {
         .subscribe((status) => {
             console.log('Realtime status:', status)
         })
-}
-
-// Update partner status
-function updatePartnerStatus() {
-    setInterval(async () => {
-        if (currentPartner) {
-            const { data } = await db.from('users').select('last_seen').eq('code', currentPartner).single()
-            const statusEl = document.getElementById('connectionStatus')
-            if (statusEl && data) statusEl.textContent = currentPartner + ' — ' + formatLastSeen(data.last_seen)
-        }
-    }, 20000)
 }
 
 // Settings
@@ -583,9 +579,9 @@ if (document.getElementById('chatBox')) {
     subscribeToMessages()
     requestNotifications()
     updateLastSeen()
-    updatePartnerStatus()
     addSwipeListeners()
     setInterval(updateLastSeen, 30000)
+    setInterval(checkTyping, 3000)
 }
 
 // Run on chats page
@@ -598,6 +594,6 @@ if (document.getElementById('chatsList')) {
 }
 
 // Run on settings page
-if (document.getElementById('autoDeleteToggle')) {
+if (documemt.getElementById('autoDeleteToggle')) {
     loadSettings()
 }
