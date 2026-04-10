@@ -51,7 +51,8 @@ async function signUp() {
     if (existingUser) { message.style.color = 'red'; message.textContent = '❌ Email already registered!'; return }
 
     const ghostCode = generateGhostCode()
-    const { error } = await db.from('users').insert({ email, password, code: ghostCode, created_at: new Date() })
+    const hashedPassword = await hashPassword(password)
+    const { error } = await db.from('users').insert({ email, password: hashedPassword, code: ghostCode, created_at: new Date() })
 
     if (!error) {
         message.style.color = '#7c3aed'
@@ -72,8 +73,9 @@ async function login() {
     const message = document.getElementById('message')
 
     if (!email || !password) { message.style.color = 'red'; message.textContent = 'Please fill all fields!'; return }
-
-    const { data } = await db.from('users').select('*').eq('email', email).eq('password', password).single()
+    
+    const hashedPassword = await hashPassword(password)
+    const { data } = await db.from('users').select('*').eq('email', email).eq('password', hashedPassword).single()
 
     if (data) {
         await db.from('users').update({ last_login: new Date(), last_seen: new Date() }).eq('id', data.id)
@@ -158,24 +160,28 @@ async function checkTyping() {
         .eq('receiver_code', myCode)
         .single()
 
-    const indicator = document.getElementById('typingIndicator')
-    if (!indicator) return
+    const statusEl = document.getElementById('connectionStatus')
+    if (!statusEl) return
+
 
     if (data && data.is_typing) {
         const diff = new Date() - new Date(data.updated_at)
         if (diff < 3000) {
-            indicator.textContent = '✏️ ' + currentPartner + ' is typing...'
-            indicator.style.display = 'block'
-        } else {
-            indicator.textContent = ''
-            indicator.style.display = 'none'
+            statusEl.textContent = '✏️ typing...'
+            statusEl.style.color = '#7c3aed'
+            return
         }
-    } else {
-        indicator.textContent = ''
-        indicator.style.display = 'none'
-    }
+    } 
+     
+// Show normal last seen when not typing
+    const { data: partnerInfo } = await db.from('users')
+        .select('last_seen')
+        .eq('code', currentPartner)
+        .single()
+    
+    statusEl.style.color = '#aaa'
+    statusEl.textContent = currentPartner + ' — ' + (partnerInfo ? formatLastSeen(partnerInfo.last_seen) : '')
 }
-
 // Reply
 let replyingTo = null
 
