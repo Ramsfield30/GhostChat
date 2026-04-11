@@ -100,7 +100,31 @@ async function login() {
     }
 }
 
-// Reset password (used by script.js resetPassword function - not OTP flow)
+// Google Sign-in
+async function signInWithGoogle() {
+    const btn = document.getElementById('googleBtn')
+    if (btn) {
+        btn.innerHTML = '<span class="spinner"></span> Connecting...'
+        btn.disabled = true
+    }
+
+    const { error } = await db.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+            redirectTo: 'https://ghost-chat-one.vercel.app/auth-callback.html'
+        }
+    })
+
+    if (error) {
+        console.log('Google error:', error)
+        if (btn) {
+            btn.innerHTML = '<i class="fa-brands fa-google"></i> Continue with Google'
+            btn.disabled = false
+        }
+    }
+}
+
+// Reset password
 async function resetPassword() {
     const email = document.getElementById('resetEmail').value
     const message = document.getElementById('message')
@@ -183,7 +207,6 @@ async function checkTyping() {
         }
     }
 
-    // Show normal last seen when not typing
     const { data: partnerInfo } = await db.from('users')
         .select('last_seen')
         .eq('code', currentPartner)
@@ -282,7 +305,14 @@ async function showMyCode() {
 
 // Notifications
 async function requestNotifications() {
-    if ('Notification' in window) await Notification.requestPermission()
+    if (!('Notification' in window)) {
+        console.log('Notifications not supported')
+        return
+    }
+    if (Notification.permission === 'default') {
+        await Notification.requestPermission()
+    }
+    console.log('Notification permission:', Notification.permission)
 }
 
 function showNotification(sender, msg) {
@@ -345,6 +375,12 @@ async function sendMessage() {
     await loadMessages()
 }
 
+// Format message time
+function formatMsgTime(timestamp) {
+    const date = new Date(timestamp)
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
 // Load messages
 async function loadMessages() {
     const myCode = localStorage.getItem('ghostCode')
@@ -392,12 +428,14 @@ async function loadMessages() {
         const sender = isMe ? 'You' : msg.sender_code
         const replyHtml = msg.reply_preview ?
             `<div class="reply-quote">${msg.reply_preview}</div>` : ''
+        const time = formatMsgTime(msg.created_at)
 
         html += `
             <div class="${side}" data-id="${msg.id}">
                 <span class="msg-sender">${sender}</span>
                 ${replyHtml}
                 <span class="msg-text">${msg.message}</span>
+                <span class="msg-time">${time}</span>
             </div>
         `
     })
@@ -424,7 +462,7 @@ async function loadMessages() {
     }
 }
 
-// Realtime + polling for typing
+// Realtime subscription
 function subscribeToMessages() {
     const myCode = localStorage.getItem('ghostCode')
     if (!myCode) return
@@ -594,29 +632,6 @@ if (document.getElementById('chatsList')) {
 }
 
 // Run on settings page
-if (documemt.getElementById('autoDeleteToggle')) {
+if (document.getElementById('autoDeleteToggle')) {
     loadSettings()
-}
-//Sign in with Google
-async function signInWithGoogle() {
-    const btn = document.getElementById('googleBtn')
-    if (btn) {
-        btn.innerHTML = '<span class="spinner"></span> Connecting...'
-        btn.disabled = true
-    }
-
-    const { error } = await db.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-            redirectTo: 'https://ghost-chat-one.vercel.app/auth-callback.html'
-        }
-    })
-
-    if (error) {
-        console.log('Google error:', error)
-        if (btn) {
-            btn.innerHTML = '<i class="fa-brands fa-google"></i> Continue with Google'
-            btn.disabled = false
-        }
-    }
 }
