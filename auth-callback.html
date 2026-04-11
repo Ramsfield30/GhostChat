@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostChat</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="auth-page">
+    <div class="container">
+        <div class="logo">👻 GhostChat</div>
+        <p class="tagline" id="status">Setting up your account...</p>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        async function handleGoogleLogin() {
+            const { data: { session } } = await db.auth.getSession()
+
+            if (!session) {
+                window.location.href = 'login.html'
+                return
+            }
+
+            const email = session.user.email
+
+            // Check if user already exists in our users table
+            const { data: existingUser } = await db
+                .from('users')
+                .select('*')
+                .eq('email', email)
+                .maybeSingle()
+
+            if (existingUser) {
+                // User exists — just login
+                localStorage.setItem('ghostCode', existingUser.code)
+                localStorage.setItem('email', email)
+                window.location.href = 'chats.html'
+            } else {
+                // New Google user — generate Ghost Code
+                const ghostCode = generateGhostCode()
+
+                const { error } = await db.from('users').insert({
+                    email: email,
+                    password: 'GOOGLE_AUTH',
+                    code: ghostCode,
+                    created_at: new Date()
+                })
+
+                if (!error) {
+                    localStorage.setItem('ghostCode', ghostCode)
+                    localStorage.setItem('email', email)
+                    document.getElementById('status').textContent = 
+                        `✅ Welcome! Your Ghost Code: ${ghostCode}`
+                    setTimeout(() => {
+                        window.location.href = 'chats.html'
+                    }, 3000)
+                } else {
+                    document.getElementById('status').textContent = '❌ Error setting up account!'
+                }
+            }
+        }
+
+        handleGoogleLogin()
+    </script>
+</body>
+</html>

@@ -581,7 +581,7 @@ if (document.getElementById('chatBox')) {
     updateLastSeen()
     addSwipeListeners()
     setInterval(updateLastSeen, 30000)
-    setInterval(checkTyping, 3000)
+    setInterval(checkTyping, 2000)
 }
 
 // Run on chats page
@@ -596,4 +596,27 @@ if (document.getElementById('chatsList')) {
 // Run on settings page
 if (documemt.getElementById('autoDeleteToggle')) {
     loadSettings()
+}
+//Sign in with Google
+async function signInWithGoogle() {
+    const btn = document.getElementById('googleBtn')
+    if (btn) {
+        btn.innerHTML = '<span class="spinner"></span> Connecting...'
+        btn.disabled = true
+    }
+
+    const { error } = await db.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+            redirectTo: 'https://ghost-chat-one.vercel.app/auth-callback.html'
+        }
+    })
+
+    if (error) {
+        console.log('Google error:', error)
+        if (btn) {
+            btn.innerHTML = '<i class="fa-brands fa-google"></i> Continue with Google'
+            btn.disabled = false
+        }
+    }
 }
