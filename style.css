@@ -51,20 +51,24 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
-input, textarea {
-    width: 100%;
-    padding: 15px;
-    background: #0a0a0a;
+.input-area textarea {
+    flex: 1;
+    padding: 10px 15px;
+    background: #1a1a1a;
     border: 1px solid #333;
-    border-radius: 10px;
+    border-radius: 20px;
     color: white;
-    font-size: 16px;
-    margin-bottom: 15px;
+    font-size: 15px;
     outline: none;
-    box-sizing: border-box;
-    font-family: Arial, sans-serif;
+    margin-bottom: 0;
+    resize: none;
+    min-height: 42px;
+    max-height: 120px;
+    overflow-y: auto;
+    line-height: 1.5;
+    display: flex;
+    align-items: center;
 }
-
 input:focus, textarea:focus {
     border-color: #7c3aed;
 }
@@ -660,4 +664,9 @@ input:checked + .toggle-slider {
 
 input:checked + .toggle-slider:before {
     transform: translateX(24px);
+}
+
+html, body {
+    height: 100%;
+    overflow: hidden;
 }

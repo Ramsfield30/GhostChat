@@ -187,7 +187,9 @@ function onTyping() {
 
 async function checkTyping() {
     const myCode = localStorage.getItem('ghostCode')
-    if (!myCode || !currentPartner) return
+    if (!myCode || !currentPartner)
+       console.log('no code or partner!')
+       return
 
     const { data } = await db.from('typing')
         .select('*')
