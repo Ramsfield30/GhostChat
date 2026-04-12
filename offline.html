@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostChat - Offline</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0a;
+            color: white;
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+        }
+        .ghost {
+            font-size: 80px;
+            animation: float 2s ease-in-out infinite;
+            display: block;
+            margin-bottom: 20px;
+        }
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+            100% { transform: translateY(0px); }
+        }
+        .signal {
+            font-size: 30px;
+            animation: blink 1.5s ease-in-out infinite;
+            display: block;
+            margin-bottom: 20px;
+        }
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.2; }
+            100% { opacity: 1; }
+        }
+        h2 {
+            font-size: 22px;
+            margin-bottom: 10px;
+        }
+        p {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        button {
+            padding: 15px 40px;
+            background: #7c3aed;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <span class="ghost">👻</span>
+    <span class="signal">📡</span>
+    <h2>You're Offline!</h2>
+    <p>Ghost needs internet to haunt! 👻<br>Check your connection and try again.</p>
+    <button onclick="window.location.reload()">Try Again</button>
+</body>
+</html>
