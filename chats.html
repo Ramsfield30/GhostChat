@@ -5,29 +5,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GhostChat - Chats</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#7c3aed">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase.js"></script>
     <link rel="stylesheet" href="style.css">
-    <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#7c3aed">
-<script>
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js')
-        .then(() => console.log('SW registered'))
-        .catch(err => console.log('SW error:', err))
-}
-</script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(() => console.log('SW registered'))
+                .catch(err => console.log('SW error:', err))
+        }
+    </script>
 </head>
 <body>
     <div class="chat-container">
         <div class="chat-header">
             <span>👻 GhostChat</span>
             <div class="header-icons">
-    <i class="fa-solid fa-magnifying-glass" onclick="toggleSearch()"></i>
-    <i class="fa-solid fa-gear" onclick="window.location.href='settings.html'"></i>
-    <i class="fa-solid fa-pen-to-square" onclick="window.location.href='chat.html'"></i>
-</div>
+                <i class="fa-solid fa-magnifying-glass" onclick="toggleSearch()"></i>
+                <i class="fa-solid fa-gear" onclick="window.location.href='settings.html'"></i>
+                <i class="fa-solid fa-pen-to-square" onclick="window.location.href='chat.html'"></i>
+            </div>
         </div>
 
         <div id="searchBar" class="search-bar" style="display:none">
@@ -37,7 +37,42 @@ if ('serviceWorker' in navigator) {
         <div id="myCodeBar" class="my-code-bar"></div>
 
         <div id="chatsList" class="chats-list">
-            <div class="loading">Loading chats...</div>
+            <!-- Skeleton loading -->
+            <div class="skeleton-item">
+                <div class="skeleton-avatar"></div>
+                <div class="skeleton-info">
+                    <div class="skeleton-name"></div>
+                    <div class="skeleton-preview"></div>
+                </div>
+            </div>
+            <div class="skeleton-item">
+                <div class="skeleton-avatar"></div>
+                <div class="skeleton-info">
+                    <div class="skeleton-name"></div>
+                    <div class="skeleton-preview"></div>
+                </div>
+            </div>
+            <div class="skeleton-item">
+                <div class="skeleton-avatar"></div>
+                <div class="skeleton-info">
+                    <div class="skeleton-name"></div>
+                    <div class="skeleton-preview"></div>
+                </div>
+            </div>
+            <div class="skeleton-item">
+                <div class="skeleton-avatar"></div>
+                <div class="skeleton-info">
+                    <div class="skeleton-name"></div>
+                    <div class="skeleton-preview"></div>
+                </div>
+            </div>
+            <div class="skeleton-item">
+                <div class="skeleton-avatar"></div>
+                <div class="skeleton-info">
+                    <div class="skeleton-name"></div>
+                    <div class="skeleton-preview"></div>
+                </div>
+            </div>
         </div>
     </div>
     <script src="script.js"></script>
