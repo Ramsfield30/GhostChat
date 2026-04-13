@@ -185,11 +185,12 @@ function onTyping() {
     typingTimeout = setTimeout(() => setTyping(false), 2000)
 }
 
+// FIXED checkTyping with proper curly braces
 async function checkTyping() {
     const myCode = localStorage.getItem('ghostCode')
-    if (!myCode || !currentPartner)
-       console.log('no code or partner!')
-       return
+    if (!myCode || !currentPartner) {
+        return
+    }
 
     const { data } = await db.from('typing')
         .select('*')
@@ -198,6 +199,7 @@ async function checkTyping() {
         .single()
 
     const statusEl = document.getElementById('connectionStatus')
+    const chatBox = document.getElementById('chatBox')
     if (!statusEl) return
 
     if (data && data.is_typing) {
@@ -205,9 +207,21 @@ async function checkTyping() {
         if (diff < 3000) {
             statusEl.textContent = '✏️ typing...'
             statusEl.style.color = '#7c3aed'
+
+            if (chatBox && !document.getElementById('typingDots')) {
+                const dots = document.createElement('div')
+                dots.id = 'typingDots'
+                dots.classList.add('typing-dots')
+                dots.innerHTML = '<span></span><span></span><span></span>'
+                chatBox.appendChild(dots)
+                chatBox.scrollTop = chatBox.scrollHeight
+            }
             return
         }
     }
+
+    const dots = document.getElementById('typingDots')
+    if (dots) dots.remove()
 
     const { data: partnerInfo } = await db.from('users')
         .select('last_seen')
@@ -294,8 +308,9 @@ async function showMyCode() {
     const lastPartner = localStorage.getItem('lastPartner')
     if (lastPartner) {
         currentPartner = lastPartner
-        const searchInput = document.getElementById('searchCode')
-        if (searchInput) searchInput.value = lastPartner
+
+        const searchArea = document.getElementById('searchArea')
+        if (searchArea) searchArea.style.display = 'none'
 
         const { data: partnerInfo } = await db.from('users').select('last_seen').eq('code', lastPartner).single()
         const statusEl = document.getElementById('connectionStatus')
@@ -307,10 +322,7 @@ async function showMyCode() {
 
 // Notifications
 async function requestNotifications() {
-    if (!('Notification' in window)) {
-        console.log('Notifications not supported')
-        return
-    }
+    if (!('Notification' in window)) return
     if (Notification.permission === 'default') {
         await Notification.requestPermission()
     }
@@ -320,7 +332,10 @@ async function requestNotifications() {
 function showNotification(sender, msg) {
     try {
         if (Notification.permission === 'granted') {
-            new Notification('👻 GhostChat', { body: `${sender}: ${msg}`, icon: '👻' })
+            new Notification('👻 GhostChat', {
+                body: `${sender}: ${msg}`,
+                icon: '/icon-192.png'
+            })
         }
     } catch(e) {
         console.log('Notification error:', e)
@@ -338,6 +353,10 @@ async function startChat() {
         currentPartner = code
         localStorage.setItem('lastPartner', code)
         lastMessageCount = 0
+
+        const searchArea = document.getElementById('searchArea')
+        if (searchArea) searchArea.style.display = 'none'
+
         const statusEl = document.getElementById('connectionStatus')
         if (statusEl) statusEl.textContent = code + ' — ' + formatLastSeen(data.last_seen)
         await loadMessages()
@@ -381,6 +400,15 @@ async function sendMessage() {
 function formatMsgTime(timestamp) {
     const date = new Date(timestamp)
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
 }
 
 // Load messages
@@ -428,15 +456,20 @@ async function loadMessages() {
         const isMe = msg.sender_code === myCode
         const side = isMe ? 'msg-sent' : 'msg-received'
         const sender = isMe ? 'You' : msg.sender_code
-        const replyHtml = msg.reply_preview ?
-            `<div class="reply-quote">${msg.reply_preview}</div>` : ''
         const time = formatMsgTime(msg.created_at)
+
+        // Escape HTML then convert newlines to <br>
+        const safeMessage = escapeHtml(msg.message).replace(/\n/g, '<br>')
+        const safeReply = msg.reply_preview ? escapeHtml(msg.reply_preview) : ''
+
+        const replyHtml = safeReply ?
+            `<div class="reply-quote">${safeReply}</div>` : ''
 
         html += `
             <div class="${side}" data-id="${msg.id}">
                 <span class="msg-sender">${sender}</span>
                 ${replyHtml}
-                <span class="msg-text">${msg.message}</span>
+                <span class="msg-text">${safeMessage}</span>
                 <span class="msg-time">${time}</span>
             </div>
         `
@@ -472,29 +505,25 @@ function subscribeToMessages() {
     if (pollingInterval) clearInterval(pollingInterval)
     pollingInterval = setInterval(async () => {
         if (currentPartner) await checkTyping()
-    }, 3000)
+    }, 2000)
 
     db.channel('ghostchat-' + myCode)
-        .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages'
-            },
-            async (payload) => {
-                const msg = payload.new
-                const myCode = localStorage.getItem('ghostCode')
-                if (msg.sender_code === myCode || msg.receiver_code === myCode) {
-                    if (!currentPartner) {
-                        currentPartner = msg.sender_code === myCode ? msg.receiver_code : msg.sender_code
-                        localStorage.setItem('lastPartner', currentPartner)
-                    }
-                    await loadMessages()
-                    if (msg.receiver_code === myCode) showNotification(msg.sender_code, msg.message)
+        .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages'
+        }, async (payload) => {
+            const msg = payload.new
+            const myCode = localStorage.getItem('ghostCode')
+            if (msg.sender_code === myCode || msg.receiver_code === myCode) {
+                if (!currentPartner) {
+                    currentPartner = msg.sender_code === myCode ? msg.receiver_code : msg.sender_code
+                    localStorage.setItem('lastPartner', currentPartner)
                 }
+                await loadMessages()
+                if (msg.receiver_code === myCode) showNotification(msg.sender_code, msg.message)
             }
-        )
+        })
         .subscribe((status) => {
             console.log('Realtime status:', status)
         })
@@ -570,7 +599,7 @@ async function loadChats() {
                 <div class="chat-avatar">👻</div>
                 <div class="chat-info">
                     <div class="chat-name">${partner.code}</div>
-                    <div class="chat-preview">${partner.lastMessage}</div>
+                    <div class="chat-preview">${escapeHtml(partner.lastMessage)}</div>
                 </div>
                 <div class="chat-meta">
                     <div class="chat-time">${formatTime(partner.time)}</div>
@@ -615,13 +644,13 @@ window.addEventListener('beforeunload', () => {
 
 // Run on chat page
 if (document.getElementById('chatBox')) {
+    console.log('Chat page loaded!')
     showMyCode()
     subscribeToMessages()
     requestNotifications()
     updateLastSeen()
     addSwipeListeners()
     setInterval(updateLastSeen, 30000)
-    setInterval(checkTyping, 2000)
 }
 
 // Run on chats page
@@ -637,3 +666,4 @@ if (document.getElementById('chatsList')) {
 if (document.getElementById('autoDeleteToggle')) {
     loadSettings()
 }
+      
