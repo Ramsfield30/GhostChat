@@ -650,7 +650,8 @@ if (document.getElementById('chatBox')) {
     requestNotifications()
     updateLastSeen()
     addSwipeListeners()
-    setInterval(updateLastSeen, 30000)
+    setInterval(updateLastSeen, 3000)
+    setInterval(checkTyping, 2000)
 }
 
 // Run on chats page
