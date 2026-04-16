@@ -56,6 +56,16 @@ if ('serviceWorker' in navigator) {
                     <i class="fa-solid fa-copy" onclick="copyCode()"></i>
                 </div>
             </div>
+            <div class="settings-item">
+    <div class="settings-info">
+        <div class="settings-label">🔔 Notifications</div>
+        <div class="settings-desc">Get notified when you receive messages</div>
+    </div>
+    <label class="toggle-switch">
+        <input type="checkbox" id="notifToggle" onchange="toggleNotifications()">
+        <span class="toggle-slider"></span>
+    </label>
+</div>
 
             <div id="settingsMessage" class="settings-message"></div>
 
@@ -77,6 +87,29 @@ if ('serviceWorker' in navigator) {
             msg.textContent = '✅ Ghost Code copied!'
             setTimeout(() => msg.textContent = '', 2000)
         }
+        async function toggleNotifications() {
+    const toggle = document.getElementById('notifToggle')
+    if (toggle.checked) {
+        const permission = await Notification.requestPermission()
+        if (permission === 'granted') {
+            toggle.checked = true
+            localStorage.setItem('notifications', 'true')
+        } else {
+            toggle.checked = false
+            localStorage.setItem('notifications', 'false')
+            alert('Please allow notifications in your browser settings!')
+        }
+    } else {
+        localStorage.setItem('notifications', 'false')
+    }
+}
+
+function loadNotificationState() {
+    const toggle = document.getElementById('notifToggle')
+    if (toggle) {
+        toggle.checked = Notification.permission === 'granted'
+    }
+}
     </script>
 </body>
 </html>

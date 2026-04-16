@@ -534,6 +534,7 @@ function loadSettings() {
     const autoDelete = localStorage.getItem('autoDelete') === 'true'
     const toggle = document.getElementById('autoDeleteToggle')
     if (toggle) toggle.checked = autoDelete
+    loadNotificationState()
 }
 
 function saveSettings() {
