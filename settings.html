@@ -5,19 +5,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GhostChat - Settings</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#7c3aed">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase.js"></script>
     <link rel="stylesheet" href="style.css">
-    <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#7c3aed">
-<script>
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js')
-        .then(() => console.log('SW registered'))
-        .catch(err => console.log('SW error:', err))
-}
-</script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(() => console.log('SW registered'))
+                .catch(err => console.log('SW error:', err))
+        }
+    </script>
 </head>
 <body>
     <div class="chat-container">
@@ -30,9 +30,9 @@ if ('serviceWorker' in navigator) {
 
         <div class="settings-body">
 
+            <!-- Messages Section -->
             <div class="settings-section">
                 <div class="settings-title">💬 Messages</div>
-
                 <div class="settings-item">
                     <div class="settings-info">
                         <div class="settings-label">Auto Delete Messages</div>
@@ -45,27 +45,32 @@ if ('serviceWorker' in navigator) {
                 </div>
             </div>
 
+            <!-- Notifications Section -->
+            <div class="settings-section">
+                <div class="settings-title">🔔 Notifications</div>
+                <div class="settings-item">
+                    <div class="settings-info">
+                        <div class="settings-label">Enable Notifications</div>
+                        <div class="settings-desc">Get notified when you receive messages</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="notifToggle" onchange="toggleNotifications()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Account Section -->
             <div class="settings-section">
                 <div class="settings-title">👤 Account</div>
-
                 <div class="settings-item">
                     <div class="settings-info">
                         <div class="settings-label">Ghost Code</div>
                         <div class="settings-desc" id="myGhostCode"></div>
                     </div>
-                    <i class="fa-solid fa-copy" onclick="copyCode()"></i>
+                    <i class="fa-solid fa-copy" onclick="copyCode()" style="color:#7c3aed;cursor:pointer;font-size:18px"></i>
                 </div>
             </div>
-            <div class="settings-item">
-    <div class="settings-info">
-        <div class="settings-label">🔔 Notifications</div>
-        <div class="settings-desc">Get notified when you receive messages</div>
-    </div>
-    <label class="toggle-switch">
-        <input type="checkbox" id="notifToggle" onchange="toggleNotifications()">
-        <span class="toggle-slider"></span>
-    </label>
-</div>
 
             <div id="settingsMessage" class="settings-message"></div>
 
@@ -78,38 +83,49 @@ if ('serviceWorker' in navigator) {
     </div>
     <script src="script.js"></script>
     <script>
+        // Show ghost code
         const code = localStorage.getItem('ghostCode')
         if (code) document.getElementById('myGhostCode').textContent = code
 
+        // Copy ghost code
         function copyCode() {
+            if (!code) return
             navigator.clipboard.writeText(code)
             const msg = document.getElementById('settingsMessage')
             msg.textContent = '✅ Ghost Code copied!'
             setTimeout(() => msg.textContent = '', 2000)
         }
-        async function toggleNotifications() {
-    const toggle = document.getElementById('notifToggle')
-    if (toggle.checked) {
-        const permission = await Notification.requestPermission()
-        if (permission === 'granted') {
-            toggle.checked = true
-            localStorage.setItem('notifications', 'true')
-        } else {
-            toggle.checked = false
-            localStorage.setItem('notifications', 'false')
-            alert('Please allow notifications in your browser settings!')
-        }
-    } else {
-        localStorage.setItem('notifications', 'false')
-    }
-}
 
-function loadNotificationState() {
-    const toggle = document.getElementById('notifToggle')
-    if (toggle) {
-        toggle.checked = Notification.permission === 'granted'
-    }
-}
+        // Toggle notifications
+        async function toggleNotifications() {
+            const toggle = document.getElementById('notifToggle')
+            if (toggle.checked) {
+                const permission = await Notification.requestPermission()
+                if (permission === 'granted') {
+                    localStorage.setItem('notifications', 'true')
+                    const msg = document.getElementById('settingsMessage')
+                    msg.textContent = '✅ Notifications enabled!'
+                    setTimeout(() => msg.textContent = '', 2000)
+                } else {
+                    toggle.checked = false
+                    localStorage.setItem('notifications', 'false')
+                    alert('Please allow notifications in your browser/phone settings!')
+                }
+            } else {
+                localStorage.setItem('notifications', 'false')
+            }
+        }
+
+        // Load notification state
+        function loadNotificationState() {
+            const toggle = document.getElementById('notifToggle')
+            if (toggle) {
+                toggle.checked = Notification.permission === 'granted' &&
+                    localStorage.getItem('notifications') === 'true'
+            }
+        }
+
+        loadNotificationState()
     </script>
 </body>
 </html>
